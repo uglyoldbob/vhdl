@@ -1,10 +1,13 @@
 absolute_permeability = 4*pi/10000000
 
+--array helper
+makeArray x = [0..(x-1)]
+
 --to convert various units to meters
 inchToMeter x = x * 0.0254
 cmToMeter x = x * 0.01
 mmToMeter x = x * 0.001
-perMFTtoPerMeter x = x * 25.4/ 12000
+perMFTtoPerMeter x = x / 304.8
 
 --ToroidRect is a toroid with a rectangular cross section
 --EEcore is a core made of two E shape sections
@@ -13,6 +16,17 @@ perMFTtoPerMeter x = x * 25.4/ 12000
 data Wire = Wire [Char] Double Double deriving (Show)
 data Shape = ToroidRect Double Double Double | EEcore Double Double deriving (Show)
 data Material = KoolMu14 | KoolMu26 | KoolMu40 | KoolMu60 | KoolMu75 | KoolMu90 | KoolMu125 | PC40
+data SineWave = SineWave { frequency :: Double, rms_current :: Double} deriving (Show)
+data RmsPower = RmsPower Double Double deriving (Show)
+
+pfc_signal = [ SineWave 60 14, SineWave 40000 1.4]
+
+power_i2r (SineWave f i) r = RmsPower f (i * i * r);
+
+power (RmsPower _ p) = p
+freq (RmsPower f _) = f
+
+total_power t = sqrt (sum [(power x) * (power x) | x <- t])
 
 magnetWire = [
     Wire "8AWG magnet wire" (inchToMeter 0.1324) (perMFTtoPerMeter 0.6281),
@@ -83,6 +97,21 @@ calcWindingArea (ToroidRect id od thick) = pi * 0.25 * id * id
 calcWindingPercent s turns (Wire _ d _) = (pi * 0.25 * d * d * turns) / (calcWindingArea s)
 calcWireLength (ToroidRect id od thick) (Wire _ d _) turns = 2 * thick + (od - id) * 0.5
 
-calcWireLayers (ToroidRect id od thick) (Wire _ d _) = round ((sqrt 0.3) * id * 0.5 / d)
+calcWireLayers (ToroidRect id od thick) (Wire _ d _) = floor ((sqrt 0.3) * id * 0.5 / d)
+calcWireLayerTurns (ToroidRect id od thick) (Wire _ d _) n = floor ((id - ((n - 0.5) * d)) * pi / d)
+calcWireLayerTurnLength (ToroidRect id od thick) (Wire _ d _) n = od-id+thick+thick+d+d+4*d*(n-1)
+calcWireMaxLength t w = sum [(calcWireLayerTurnLength t (w) x) * fromIntegral(calcWireLayerTurns t (w) x) | x <- [1..(fromIntegral (calcWireLayers t (w)))]]
+calcWireMaxResist t w = (resist w) * sum [(calcWireLayerTurnLength t (w) x) * fromIntegral(calcWireLayerTurns t (w) x) | x <- [1..(fromIntegral (calcWireLayers t (w)))]]
+calcWirePower t w s = total_power [power_i2r x (calcWireMaxResist t w) | x <- s]
+
+resist (Wire _ _ w) = w
+diameter (Wire _ d _) = d
 
 calcH (ToroidRect id od thick) turns current = 0.01 * turns * current / (pi * (id + od) * 0.5)
+
+--[(calcWireLayerTurnLength me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
+
+--sum [(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
+
+--max wire length
+--sum [(calcWireLayerTurnLength me (magnetWire!!4) x) * fromIntegral(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
