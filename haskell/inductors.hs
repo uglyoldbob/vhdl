@@ -53,6 +53,16 @@ data Inductor = Inductor {
     ind_driving :: [SineWave]
     } deriving (Show)
 
+prettyPrintInductor :: Inductor -> IO ()
+prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
+                             putStr " "
+                             print (ind_shape ind)
+                             (putStr . show) (ind_minL ind)
+                             putStr " mH "
+                             print "haha"
+                             print 3.2
+                             print [3,4,3]
+
 makeInductor mat shape wire max_curr targetL toleranceL driver = 
     Inductor achieved mat shape turns wpower wire length cpower driver
     where turns_math = last(calcTurns shape mat wire max_curr targetL toleranceL 1)
