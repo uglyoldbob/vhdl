@@ -56,6 +56,7 @@ findInput t guess goal tolerance
           
 data Inductor = Inductor { 
     ind_minL :: Double,
+    ind_maxL :: Double,
     ind_mat :: Material,
     ind_shape :: Shape,
     ind_turns :: Double,
@@ -84,9 +85,12 @@ prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
                              print (ind_shape ind)
                              (putStr) (engineeringPrint (ind_minL ind) "H")
                              putStr ", "
+                             (putStr) (engineeringPrint (ind_maxL ind) "H")
+                             putStr ", "
                              (putStr . show) (ind_turns ind)
                              putStr " turns, "
-                             (putStr) (printf "%.1f%% full" ((ind_filled ind) * 100))
+                             (putStr) (printf "%.1f%% full " ((ind_filled ind) * 100))
+                             (putStr . show) (ind_wire ind)
                              putStr "\n"
                              (putStr) (engineeringPrint ((ind_w_pwr ind) + (ind_c_pwr ind)) "W")
                              putStr ", "
@@ -94,18 +98,22 @@ prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
                              putStr " copper, "
                              (putStr) (engineeringPrint (ind_c_pwr ind) "W")
                              putStr " core"
-                             putStr "\n"
+                             putStr "\n\n"
 
 makeInductor mat shape wire max_curr targetL toleranceL driver = 
-    Inductor achieved mat shape turns percent wpower wire length cpower driver
+    Inductor achieved maxl mat shape turns percent wpower wire length cpower driver
     where turns_math = last(calcTurns shape mat wire max_curr targetL toleranceL 1)
+          maxl = calcL shape mat 0 turns
           achieved = snd (turns_math)
           turns = fst (turns_math)
           wpower = (calcWirePower shape wire turns driver)
-          cpower = 0.4321
+          cpower = calcCorePower shape mat turns wire driver
           percent = calcWindingPercent shape turns wire
           length = (calcWireLength shape wire turns)
-    
+
+buildInductor max_curr targetL toleranceL driver =
+    [makeInductor mat shape wire max_curr targetL toleranceL driver | mat <- allMaterial, wire <- magnetWire, shape <- lotsToroids]
+          
 pfc_signal = [ SineWave 60 14, SineWave 40000 1.4]
 
 power_i2r (SineWave f i) r = RmsPower f (i * i * r);
@@ -222,14 +230,38 @@ calcWirePower t w turns s = total_power [power_i2r x (calcWireResist t w turns) 
 calcVolume :: Shape -> Double
 calcVolume (ToroidRect id od thick) = ((od * od * 0.25) - (id * id * 0.25)) * pi * thick
 
+pfc_core_loss :: Shape -> Material -> Double -> [SineWave] -> [Double]
+pfc_core_loss shape mat turns signal
+    | low_freq > 0.0 = [calcCorePowerMinMax shape mat turns high_freq (calc * (1 - (high_peak / low_peak))) (calc * (1 + (high_peak / low_peak))) | calc <- range]
+    | otherwise = [calcCorePowerMinMax shape mat turns high_freq ((rms_current (signal!!0)) - high_peak) ((rms_current (signal!!0)) + high_peak)]
+    where low_freq = (frequency (signal!!0))
+          high_freq = (frequency (signal!!1))
+          low_peak = (rms_current (signal!!0)) * sqrt(2)
+          high_peak = (rms_current (signal!!1)) * sqrt(2)
+          volume = calcVolume shape
+          h = calcH shape turns
+          density x y = (calcCoreLossDensity mat (calcB mat (h x)) y)
+          range = (map ((low_peak * ) . sin . (0.01*pi*)) [0..99])
+
+calcCorePowerMinMax shape mat turns fr minI maxI = density * volume * 1000
+    where volume = calcVolume shape
+          minh = calcH shape turns minI
+          maxh = calcH shape turns maxI
+          density = (calcCoreLossDensity mat deltab fr)
+          deltab = ((calcB mat maxh) - (calcB mat minh)) * 0.5
+
+rmsCalc :: [Double] -> Double
+rmsCalc list = sqrt (((sum) (map (** 2) list)) / fromIntegral(length list))
+          
+calcCorePower :: Shape -> Material -> Double -> Wire -> [SineWave] -> Double
 calcCorePower shape mat turns wire signal
-    | (length signal == 2) = 5
+    | (length signal == 2) = rmsCalc power_list
     | (length signal == 1) = density * volume * 1000
     where volume = calcVolume shape
           flux = calcB mat
           h = calcH shape turns
           density = (calcCoreLossDensity mat (flux (h (sqrt(2) * (rms_current (signal!!0))))) (frequency (signal!!0)))
-    
+          power_list = pfc_core_loss shape mat turns signal
 
 resist (Wire _ _ w) = w
 diameter (Wire _ d _) = d
@@ -240,15 +272,18 @@ calcH (ToroidRect id od thick) turns current = 0.01 * turns * current / (pi * (i
 
 --material and H input, output B in tesla
 calcB :: Material -> Double -> Double
-calcB mat h =  what mat
- where what KoolMu14 =  ((1.105e-1 + 1.301e-2 * h + 6.115e-4 * h * h) / (1 + 1.386e-1 * h + 5.735e-4 * h * h)) ** 1.760
-       what KoolMu26 =  ((1.008e-1 + 1.452e-2 * h + 7.846e-4 * h * h) / (1 + 1.035e-1 * h + 7.573e-4 * h * h)) ** 1.754
-       what KoolMu40 =  ((5.180e-2 + 2.132e-2 * h + 7.941e-4 * h * h) / (1 + 8.447e-2 * h + 7.652e-4 * h * h)) ** 1.756
-       what KoolMu60 =  ((5.214e-2 + 2.299e-2 * h + 8.537e-4 * h * h) / (1 + 7.029e-2 * h + 8.183e-4 * h * h)) ** 1.658
-       what KoolMu75 =  ((4.489e-2 + 2.593e-2 * h + 7.949e-4 * h * h) / (1 + 6.463e-2 * h + 7.925e-4 * h * h)) ** 1.595
-       what KoolMu90 =  ((4.182e-2 + 2.990e-2 * h + 7.826e-4 * h * h) / (1 + 6.542e-2 * h + 7.669e-4 * h * h)) ** 1.569
-       what KoolMu125 = ((1.414e-2 + 2.850e-2 * h + 1.135e-3 * h * h) / (1 + 7.550e-2 * h + 1.088e-3 * h * h)) ** 1.274
-       what PC40 = 1.0
+calcB mat j
+ | j > 0 = what mat
+ | otherwise = (-(what mat))
+ where h = abs(j)
+       what KoolMu14 =  ((1.105e-1 + (1.301e-2 * h) + (6.115e-4 * h * h)) / (1 + (1.386e-1 * h) + (5.735e-4 * h * h))) ** 1.760
+       what KoolMu26 =  ((1.008e-1 + (1.452e-2 * h) + (7.846e-4 * h * h)) / (1 + (1.035e-1 * h) + (7.573e-4 * h * h))) ** 1.754
+       what KoolMu40 =  ((5.180e-2 + (2.132e-2 * h) + (7.941e-4 * h * h)) / (1 + (8.447e-2 * h) + (7.652e-4 * h * h))) ** 1.756
+       what KoolMu60 =  ((5.214e-2 + (2.299e-2 * h) + (8.537e-4 * h * h)) / (1 + (7.029e-2 * h) + (8.183e-4 * h * h))) ** 1.658
+       what KoolMu75 =  ((4.489e-2 + (2.593e-2 * h) + (7.949e-4 * h * h)) / (1 + (6.463e-2 * h) + (7.925e-4 * h * h))) ** 1.595
+       what KoolMu90 =  ((4.182e-2 + (2.990e-2 * h) + (7.826e-4 * h * h)) / (1 + (6.542e-2 * h) + (7.669e-4 * h * h))) ** 1.569
+       what KoolMu125 = ((1.414e-2 + (2.850e-2 * h) + (1.135e-3 * h * h)) / (1 + (7.550e-2 * h) + (1.088e-3 * h * h))) ** 1.274
+       what PC40 = ((1.414e-2 + (2.850e-2 * h) + (1.135e-3 * h * h)) / (1 + (7.550e-2 * h) + (1.088e-3 * h * h))) ** 1.274
 
        --  - 904.56
 calcCoreLossDensity mat flux freq = what mat
