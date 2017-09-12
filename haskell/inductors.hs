@@ -1,3 +1,10 @@
+import System.IO
+import Text.Printf
+
+main = do
+    writeFile "output.csv" ((unlines) (graphMaker KoolMu26 40000 (coreLossConversion KoolMu26 40000) 0.01 1 100))
+    appendFile "output.csv" ((unlines) (graphMaker KoolMu26 50000 (coreLossConversion KoolMu26 50000) 0.01 1 100))
+
 absolute_permeability = 4*pi/10000000
 
 --array helper
@@ -11,6 +18,12 @@ inchToMeter x = x * 0.0254
 cmToMeter x = x * 0.01
 mmToMeter x = x * 0.001
 perMFTtoPerMeter x = x / 304.8
+
+coreLossConversion mat freq input = calcCoreLossDensity mat input freq
+
+graphMaker :: Material -> Double -> (Double -> Double) -> Double -> Double -> Double -> [[Char]]
+graphMaker mat freq func minx maxx steps= [do printf "%.4f, %.4f" (x) (logBase 10 (func (10**x))) | x <- values]
+    where values = [(logBase 10 minx) + (x * (logBase 10 (maxx/minx))/steps) | x <- [1..steps]]
 
 --ToroidRect is a toroid with a rectangular cross section
 --EEcore is a core made of two E shape sections
@@ -46,6 +59,7 @@ data Inductor = Inductor {
     ind_mat :: Material,
     ind_shape :: Shape,
     ind_turns :: Double,
+    ind_filled :: Double,
     ind_w_pwr :: Double,
     ind_wire :: Wire,
     ind_wire_length :: Double,
@@ -53,23 +67,43 @@ data Inductor = Inductor {
     ind_driving :: [SineWave]
     } deriving (Show)
 
+engineeringPrint :: Double -> [Char] -> [Char]
+engineeringPrint num unit
+    | num < 1e-6 = printf "%.3f n" (num / 1e-9) ++ unit
+    | num < 1e-3 = printf "%.3f u" (num / 1e-6) ++ unit
+    | num < 1 = printf "%.3f m" (num / 1e-3) ++ unit
+    | num < 1e3 = printf "%.3f" (num) ++ unit
+    | num < 1e6 = printf "%.3f K" (num / 1e3) ++ unit
+    | otherwise = printf "%.3f " num ++ unit
+    
+    
+    
 prettyPrintInductor :: Inductor -> IO ()
 prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
                              putStr " "
                              print (ind_shape ind)
-                             (putStr . show) (ind_minL ind)
-                             putStr " mH "
-                             print "haha"
-                             print 3.2
-                             print [3,4,3]
+                             (putStr) (engineeringPrint (ind_minL ind) "H")
+                             putStr ", "
+                             (putStr . show) (ind_turns ind)
+                             putStr " turns, "
+                             (putStr) (printf "%.1f%% full" ((ind_filled ind) * 100))
+                             putStr "\n"
+                             (putStr) (engineeringPrint ((ind_w_pwr ind) + (ind_c_pwr ind)) "W")
+                             putStr ", "
+                             (putStr) (engineeringPrint (ind_w_pwr ind) "W")
+                             putStr " copper, "
+                             (putStr) (engineeringPrint (ind_c_pwr ind) "W")
+                             putStr " core"
+                             putStr "\n"
 
 makeInductor mat shape wire max_curr targetL toleranceL driver = 
-    Inductor achieved mat shape turns wpower wire length cpower driver
+    Inductor achieved mat shape turns percent wpower wire length cpower driver
     where turns_math = last(calcTurns shape mat wire max_curr targetL toleranceL 1)
           achieved = snd (turns_math)
           turns = fst (turns_math)
           wpower = (calcWirePower shape wire turns driver)
           cpower = 0.4321
+          percent = calcWindingPercent shape turns wire
           length = (calcWireLength shape wire turns)
     
 pfc_signal = [ SineWave 60 14, SineWave 40000 1.4]
@@ -117,7 +151,10 @@ magnetWire = [
     Wire "40AWG magnet wire" (inchToMeter 0.0037) (perMFTtoPerMeter 1079)
     ]
 
-me = ToroidRect (mmToMeter 102.4) (mmToMeter 165.1) (mmToMeter 31.75)
+me = ToroidRect (mmToMeter 14.7) (mmToMeter 26.9) (mmToMeter 11.2)
+me2 = ToroidRect (mmToMeter 102.4) (mmToMeter 165.1) (mmToMeter 31.75)
+
+lotsToroids = [ToroidRect x y z | x <- [10..170], y <- [11..185], z <- [5..32]]
     
 calcAL relPerm area length = (absolute_permeability) * relPerm * area / length
 calcShapeAL t mat = calcAL (permeability mat) (calcMagArea t) (calcMagLength t)
@@ -182,9 +219,22 @@ calcWireResist t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxResist
 calcWireLength t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxLength t w)
 calcWirePower t w turns s = total_power [power_i2r x (calcWireResist t w turns) | x <- s]
 
+calcVolume :: Shape -> Double
+calcVolume (ToroidRect id od thick) = ((od * od * 0.25) - (id * id * 0.25)) * pi * thick
+
+calcCorePower shape mat turns wire signal
+    | (length signal == 2) = 5
+    | (length signal == 1) = density * volume * 1000
+    where volume = calcVolume shape
+          flux = calcB mat
+          h = calcH shape turns
+          density = (calcCoreLossDensity mat (flux (h (sqrt(2) * (rms_current (signal!!0))))) (frequency (signal!!0)))
+    
+
 resist (Wire _ _ w) = w
 diameter (Wire _ d _) = d
 
+--at / cm
 calcH :: Shape -> Double -> Double -> Double
 calcH (ToroidRect id od thick) turns current = 0.01 * turns * current / (pi * (id + od) * 0.5)
 
@@ -200,16 +250,17 @@ calcB mat h =  what mat
        what KoolMu125 = ((1.414e-2 + 2.850e-2 * h + 1.135e-3 * h * h) / (1 + 7.550e-2 * h + 1.088e-3 * h * h)) ** 1.274
        what PC40 = 1.0
 
+       --  - 904.56
 calcCoreLossDensity mat flux freq = what mat
- where what KoolMu14 =  1
-       what KoolMu26 =  (flux ** 1.766) * (1e-6 * 0.2546 * freq - 904.56)
-       what KoolMu40 =  (flux ** 1.766) * (1e-6 * 0.2546 * freq - 904.56)
-       what KoolMu60 =  4
-       what KoolMu75 =  5
-       what KoolMu90 =  6
-       what KoolMu125 = 7
+ where what KoolMu14 =  1 * 21.5 * (flux ** 1.000) * ((freq/1000) ** 1.330)
+       what KoolMu26 =  1 * 45.5 * (flux ** 1.774) * ((freq/1000) ** 1.460)
+       what KoolMu40 =  1 * 45.5 * (flux ** 1.774) * ((freq/1000) ** 1.460)
+       what KoolMu60 =  1 * 62.7 * (flux ** 1.781) * ((freq/1000) ** 1.360)
+       what KoolMu75 =  1 * 146.8 * (flux ** 2.022) * ((freq/1000) ** 1.330)
+       what KoolMu90 =  1 * 146.8 * (flux ** 2.022) * ((freq/1000) ** 1.330)
+       what KoolMu125 = 1 * 71.9 * (flux ** 1.928) * ((freq/1000) ** 1.470)
        what PC40 = 1.0
-       
+
 --[(calcWireLayerTurnLength me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
 
 --sum [(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
