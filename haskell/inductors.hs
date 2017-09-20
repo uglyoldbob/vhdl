@@ -2,9 +2,15 @@ import System.IO
 import Text.Printf
 
 main = do
-    mapM prettyPrintInductor (take 5 inductorList)
- where inductorList = makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (KoolMu75, ToroidRect (mmToMeter 45.3) (mmToMeter 74.1) (mmToMeter 35))
+    mapM prettyPrintInductor (take 5 sorted_list)
+ where inductorList = makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (PC40, ToroidRect (mmToMeter 65) (mmToMeter 102) (mmToMeter 20))
+       notFullList = filter notfull inductorList
+       sorted_list = inductorSort notFullList totalInductorPower 
 
+inductorFilterSort ind_l = notFullList
+    where notFullList = filter notfull ind_l
+          sorted = inductorSort notFullList totalInductorPower
+       
 absolute_permeability = 4*pi/10000000
 
 lineCalc :: [(Double, Double)] -> [Double]
@@ -339,9 +345,12 @@ oerstedToAtCm x = 250 * x / pi
 
 --to convert various units to meters
 inchToMeter x = x * 0.0254
+meterToFeet x = x / (12 * 0.0254)
+footToMeter x = inchToMeter (x * 12)
 cmToMeter x = x * 0.01
 mmToMeter x = x * 0.001
 perMFTtoPerMeter x = x / 304.8
+feetPerLbTolbsPerMeter x = 1 / (footToMeter x)
 
 coreLossConversion mat freq input = calcCoreLossDensity mat input freq
 
@@ -353,7 +362,7 @@ graphMaker mat freq func minx maxx steps= [do printf "%.4f, %.4f" (x) (logBase 1
 --EEcore is a core made of two E shape sections
 
 --name, diameter, resistance/meter
-data Wire = Wire [Char] Double Double deriving (Show)
+data Wire = Wire [Char] Double Double Double deriving (Show)
 data Shape = ToroidRect Double Double Double | EEcore Double Double deriving (Show)
 data Material = KoolMu14 | KoolMu26 | KoolMu40 | KoolMu60 | KoolMu75 | KoolMu90 | KoolMu125 | PC40 deriving (Show, Enum, Bounded)
 data SineWave = SineWave { frequency :: Double, rms_current :: Double} deriving (Show)
@@ -390,6 +399,10 @@ data Inductor = Inductor {
     ind_driving :: [SineWave]
     } deriving (Show)
 
+inductorImpedance ind freq = [a, b]
+    where a = 2 * pi * freq * (ind_minL ind)
+          b = 2 * pi * freq * (ind_maxL ind)
+    
 engineeringPrint :: Double -> [Char] -> [Char]
 engineeringPrint num unit
     | num < 1e-6 = printf "%.3f n" (num / 1e-9) ++ unit
@@ -421,6 +434,10 @@ prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
                              (putStr) (printf "%.1f%% full " ((ind_filled ind) * 100))
                              (putStr . show) (ind_wire ind)
                              putStr "\n"
+                             (putStr) (printf "%.1f feet " (meterToFeet (ind_wire_length ind)))
+                             putStr "\n"
+                             (putStr) (printf "%.1f pounds " ((wire_density (ind_wire ind)) * (ind_wire_length ind)))
+                             putStr "\n"
                              (putStr) (engineeringPrint ((ind_w_pwr ind) + (ind_c_pwr ind)) "W")
                              putStr ", "
                              (putStr) (engineeringPrint (ind_w_pwr ind) "W")
@@ -429,10 +446,51 @@ prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
                              putStr " core"
                              putStr "\n\n"
 
+                             
+tweakInductor :: Shape -> Double -> Double -> [Shape]                             
+tweakInductor (ToroidRect x y z) gain steps  = outp
+    where mul = map ((10**) . (*gain) . (/10)) [-steps..steps]
+          outp = [ToroidRect mx my mz | mx <- map (*x) mul, my <- map (*y) mul, mz <- map (*z) mul, my > mx]
+
+headOrEmpty :: [a] -> [a]
+headOrEmpty l
+    | null l = []
+    | otherwise = [head l]
+
+lastOrEmpty :: [a] -> [a]
+lastOrEmpty l
+    | null l = []
+    | otherwise = [last l]
+          
+tweakInductorCalc mat max_curr targetL toleranceL driver gain steps shape = headOrEmpty lessPower
+    where best_result = shape
+          result_list = [inductorOptimumWire mat x max_curr targetL toleranceL driver | x <- tweak_shapes]
+          resf = inductorFilterSort result_list
+          opower = totalInductorPower (inductorOptimumWire mat shape max_curr targetL toleranceL driver)
+          lessPower = filter ((< opower) . totalInductorPower) resf
+          tweak_shapes = tweakInductor shape gain steps
+
+tweakInductorStage :: [Inductor] -> (Shape -> [Inductor]) -> [Inductor]
+tweakInductorStage [] _ = []
+tweakInductorStage (x:_) calc = newval ++ tweakInductorStage newval calc
+    where newval = calc (ind_shape x)
+
+testL = head (inductorSort (makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (PC40, me3)) totalInductorPower)
+
+tweakInductorRecursive ind max_curr targetL toleranceL gain steps
+    | null calc = []
+    | otherwise = [ind] ++ stuff
+    where calc = tweakInductorCalc (ind_mat ind) max_curr targetL toleranceL (ind_driving ind) gain steps (ind_shape ind)
+          stuff = (tweakInductorRecursive (head calc) max_curr targetL toleranceL (gain * 0.9) steps)
+    
+inductorOptimumWire mat shape max_curr targetL toleranceL driver = head notFullList
+    where rlist = [makeInductor mat shape x max_curr targetL toleranceL driver | x <- magnetWire]
+          notFullList = filter notfull rlist
+    
 makeInductor mat shape wire max_curr targetL toleranceL driver = 
     Inductor achieved maxl mat shape turns percent wpower wire length cpower driver
     where turns_math = last(calcTurns shape mat wire max_curr targetL toleranceL 1)
-          maxl = calcL shape mat 0 turns
+          maxl = calcL shape mat 0.01 turns
           achieved = snd (turns_math)
           turns = fst (turns_math)
           wpower = (calcWirePower shape wire turns driver)
@@ -459,47 +517,49 @@ allMaterial = [(minBound::Material) ..]
 
 pfc_signal = [ SineWave 60 14, SineWave 40000 1.4]
 
+--http://www.coonerwire.com/magnet-wire/
 magnetWire = [
-    Wire "8AWG magnet wire" (inchToMeter 0.1324) (perMFTtoPerMeter 0.6281),
-    Wire "9AWG magnet wire" (inchToMeter 0.1181) (perMFTtoPerMeter 0.7925),
-    Wire "10AWG magnet wire" (inchToMeter 0.1054) (perMFTtoPerMeter 0.9987),
-    Wire "11AWG magnet wire" (inchToMeter 0.0941) (perMFTtoPerMeter 1.261),
-    Wire "12AWG magnet wire" (inchToMeter 0.0840) (perMFTtoPerMeter 1.588),
-    Wire "13AWG magnet wire" (inchToMeter 0.0750) (perMFTtoPerMeter 2.001),
-    Wire "14AWG magnet wire" (inchToMeter 0.0670) (perMFTtoPerMeter 2.524),
-    Wire "15AWG magnet wire" (inchToMeter 0.0599) (perMFTtoPerMeter 3.181),
-    Wire "16AWG magnet wire" (inchToMeter 0.0534) (perMFTtoPerMeter 4.018),
-    Wire "17AWG magnet wire" (inchToMeter 0.0478) (perMFTtoPerMeter 5.054),
-    Wire "18AWG magnet wire" (inchToMeter 0.0426) (perMFTtoPerMeter 6.386),
-    Wire "19AWG magnet wire" (inchToMeter 0.0382) (perMFTtoPerMeter 8.046),
-    Wire "20AWG magnet wire" (inchToMeter 0.0341) (perMFTtoPerMeter 10.13),
-    Wire "21AWG magnet wire" (inchToMeter 0.0306) (perMFTtoPerMeter 12.77),
-    Wire "22AWG magnet wire" (inchToMeter 0.0273) (perMFTtoPerMeter 16.2),
-    Wire "23AWG magnet wire" (inchToMeter 0.0244) (perMFTtoPerMeter 20.3),
-    Wire "24AWG magnet wire" (inchToMeter 0.0218) (perMFTtoPerMeter 25.67),
-    Wire "25AWG magnet wire" (inchToMeter 0.0195) (perMFTtoPerMeter 32.37),
-    Wire "26AWG magnet wire" (inchToMeter 0.0174) (perMFTtoPerMeter 41.02),
-    Wire "27AWG magnet wire" (inchToMeter 0.0156) (perMFTtoPerMeter 51.44),
-    Wire "28AWG magnet wire" (inchToMeter 0.0139) (perMFTtoPerMeter 65.31),
-    Wire "29AWG magnet wire" (inchToMeter 0.0126) (perMFTtoPerMeter 81.21),
-    Wire "30AWG magnet wire" (inchToMeter 0.0112) (perMFTtoPerMeter 103.7),
-    Wire "31AWG magnet wire" (inchToMeter 0.0100) (perMFTtoPerMeter 130.9),
-    Wire "32AWG magnet wire" (inchToMeter 0.0091) (perMFTtoPerMeter 162),
-    Wire "33AWG magnet wire" (inchToMeter 0.0081) (perMFTtoPerMeter 205.7),
-    Wire "34AWG magnet wire" (inchToMeter 0.0072) (perMFTtoPerMeter 261.3),
-    Wire "35AWG magnet wire" (inchToMeter 0.0064) (perMFTtoPerMeter 330.7),
-    Wire "36AWG magnet wire" (inchToMeter 0.0058) (perMFTtoPerMeter 414.8),
-    Wire "37AWG magnet wire" (inchToMeter 0.0052) (perMFTtoPerMeter 512.1),
-    Wire "38AWG magnet wire" (inchToMeter 0.0047) (perMFTtoPerMeter 648.2),
-    Wire "39AWG magnet wire" (inchToMeter 0.0041) (perMFTtoPerMeter 846.6),
-    Wire "40AWG magnet wire" (inchToMeter 0.0037) (perMFTtoPerMeter 1079)
+    Wire "8AWG magnet wire" (inchToMeter 0.1324) (perMFTtoPerMeter 0.6281) (feetPerLbTolbsPerMeter 19.91),
+    Wire "9AWG magnet wire" (inchToMeter 0.1181) (perMFTtoPerMeter 0.7925) (feetPerLbTolbsPerMeter 25.13),
+    Wire "10AWG magnet wire" (inchToMeter 0.1054) (perMFTtoPerMeter 0.9987) (feetPerLbTolbsPerMeter 31.68),
+    Wire "11AWG magnet wire" (inchToMeter 0.0941) (perMFTtoPerMeter 1.261) (feetPerLbTolbsPerMeter 39.92),
+    Wire "12AWG magnet wire" (inchToMeter 0.0840) (perMFTtoPerMeter 1.588) (feetPerLbTolbsPerMeter 50.18),
+    Wire "13AWG magnet wire" (inchToMeter 0.0750) (perMFTtoPerMeter 2.001) (feetPerLbTolbsPerMeter 63.25),
+    Wire "14AWG magnet wire" (inchToMeter 0.0670) (perMFTtoPerMeter 2.524) (feetPerLbTolbsPerMeter 80.80),
+    Wire "15AWG magnet wire" (inchToMeter 0.0599) (perMFTtoPerMeter 3.181) (feetPerLbTolbsPerMeter 100.50),
+    Wire "16AWG magnet wire" (inchToMeter 0.0534) (perMFTtoPerMeter 4.018) (feetPerLbTolbsPerMeter 126.70),
+    Wire "17AWG magnet wire" (inchToMeter 0.0478) (perMFTtoPerMeter 5.054) (feetPerLbTolbsPerMeter 159.70),
+    Wire "18AWG magnet wire" (inchToMeter 0.0426) (perMFTtoPerMeter 6.386) (feetPerLbTolbsPerMeter 201.20),
+    Wire "19AWG magnet wire" (inchToMeter 0.0382) (perMFTtoPerMeter 8.046) (feetPerLbTolbsPerMeter 253.20),
+    Wire "20AWG magnet wire" (inchToMeter 0.0341) (perMFTtoPerMeter 10.13) (feetPerLbTolbsPerMeter 319.50),
+    Wire "21AWG magnet wire" (inchToMeter 0.0306) (perMFTtoPerMeter 12.77) (feetPerLbTolbsPerMeter 402.70),
+    Wire "22AWG magnet wire" (inchToMeter 0.0273) (perMFTtoPerMeter 16.2) (feetPerLbTolbsPerMeter 507.60),
+    Wire "23AWG magnet wire" (inchToMeter 0.0244) (perMFTtoPerMeter 20.3) (feetPerLbTolbsPerMeter 650.00),
+    Wire "24AWG magnet wire" (inchToMeter 0.0218) (perMFTtoPerMeter 25.67) (feetPerLbTolbsPerMeter 805.50),
+    Wire "25AWG magnet wire" (inchToMeter 0.0195) (perMFTtoPerMeter 32.37) (feetPerLbTolbsPerMeter 1012.1),
+    Wire "26AWG magnet wire" (inchToMeter 0.0174) (perMFTtoPerMeter 41.02) (feetPerLbTolbsPerMeter 1276),
+    Wire "27AWG magnet wire" (inchToMeter 0.0156) (perMFTtoPerMeter 51.44) (feetPerLbTolbsPerMeter 1605),
+    Wire "28AWG magnet wire" (inchToMeter 0.0139) (perMFTtoPerMeter 65.31) (feetPerLbTolbsPerMeter 2820),
+    Wire "29AWG magnet wire" (inchToMeter 0.0126) (perMFTtoPerMeter 81.21) (feetPerLbTolbsPerMeter 2538),
+    Wire "30AWG magnet wire" (inchToMeter 0.0112) (perMFTtoPerMeter 103.7) (feetPerLbTolbsPerMeter 3205),
+    Wire "31AWG magnet wire" (inchToMeter 0.0100) (perMFTtoPerMeter 130.9) (feetPerLbTolbsPerMeter 4032),
+    Wire "32AWG magnet wire" (inchToMeter 0.0091) (perMFTtoPerMeter 162) (feetPerLbTolbsPerMeter 5086),
+    Wire "33AWG magnet wire" (inchToMeter 0.0081) (perMFTtoPerMeter 205.7) (feetPerLbTolbsPerMeter 6369),
+    Wire "34AWG magnet wire" (inchToMeter 0.0072) (perMFTtoPerMeter 261.3) (feetPerLbTolbsPerMeter 8039),
+    Wire "35AWG magnet wire" (inchToMeter 0.0064) (perMFTtoPerMeter 330.7) (feetPerLbTolbsPerMeter 10111),
+    Wire "36AWG magnet wire" (inchToMeter 0.0058) (perMFTtoPerMeter 414.8) (feetPerLbTolbsPerMeter 12690),
+    Wire "37AWG magnet wire" (inchToMeter 0.0052) (perMFTtoPerMeter 512.1) (feetPerLbTolbsPerMeter 16026),
+    Wire "38AWG magnet wire" (inchToMeter 0.0047) (perMFTtoPerMeter 648.2) (feetPerLbTolbsPerMeter 20243),
+    Wire "39AWG magnet wire" (inchToMeter 0.0041) (perMFTtoPerMeter 846.6) (feetPerLbTolbsPerMeter 25445),
+    Wire "40AWG magnet wire" (inchToMeter 0.0037) (perMFTtoPerMeter 1079)(feetPerLbTolbsPerMeter 31949) 
     ]
 
 lotsToroids = [ToroidRect (mmToMeter (10 * x**1.2)) (mmToMeter (10 * y**1.2)) (mmToMeter (10 * z**1.2)) | x <- [1..20], y <- [1..20], z <- [1..5], x < y]
 specialToroids = [ToroidRect (mmToMeter 45.3) (mmToMeter 74.1) (mmToMeter z) | z <- [20..75]]
 me = ToroidRect (mmToMeter 14.7) (mmToMeter 26.9) (mmToMeter 11.2)
 me2 = ToroidRect (mmToMeter 102.4) (mmToMeter 165.1) (mmToMeter 31.75)
-    
+me3 = ToroidRect (mmToMeter 65) (mmToMeter 102) (mmToMeter 20)
+
 calcAL relPerm area length = (absolute_permeability) * relPerm * area / length
 calcShapeAL t mat = calcAL (permeability mat) (calcMagArea t) (calcMagLength t)
 calcL t mat current turns = (calcShapeAL t mat) * turns * turns * (permeability_bias mat (calcH t turns current)) 
@@ -570,18 +630,18 @@ calcMagArea (ToroidRect id od thick) = (od-id) * 0.5 * thick
 calcWindingArea :: Shape -> Double
 calcWindingArea (ToroidRect id od thick) = pi * 0.25 * id * id
 
-calcWindingPercent s turns (Wire _ d _) = (pi * 0.25 * d * d * turns) / (calcWindingArea s)
+calcWindingPercent s turns (Wire _ d _ _) = (pi * 0.25 * d * d * turns) / (calcWindingArea s)
 
 calcWireLayers :: Shape -> Wire -> Double
-calcWireLayers (ToroidRect id od thick) (Wire _ d _) = fromIntegral(floor ((sqrt 0.3) * id * 0.5 / d))
+calcWireLayers (ToroidRect id od thick) (Wire _ d _ _) = fromIntegral(floor ((sqrt 0.3) * id * 0.5 / d))
 
 calcWireLayerTurns :: Shape -> Wire -> Double -> Double
-calcWireLayerTurns (ToroidRect id od thick) (Wire _ d _) n = fromIntegral (floor ((id - ((n - 0.5) * d)) * pi / d))
+calcWireLayerTurns (ToroidRect id od thick) (Wire _ d _ _) n = fromIntegral (floor ((id - ((n - 0.5) * d)) * pi / d))
 
 calcWireMaxTurns t w = sum [(calcWireLayerTurns t w x) | x <- [1..( (calcWireLayers t w))]]
 
 calcWireLayerTurnLength :: Shape -> Wire -> Double -> Double
-calcWireLayerTurnLength (ToroidRect id od thick) (Wire _ d _) n = od-id+thick+thick+d+d+4*d*(n-1)
+calcWireLayerTurnLength (ToroidRect id od thick) (Wire _ d _ _) n = od-id+thick+thick+d+d+4*d*(n-1)
 
 calcWireMaxLength t w = sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
 calcWireMaxResist t w = (resist w) * sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
@@ -626,8 +686,9 @@ calcCorePower shape mat turns wire signal
           density = (calcCoreLossDensity mat (flux (h (sqrt(2) * (rms_current (signal!!0))))) (frequency (signal!!0)))
           power_list = pfc_core_loss shape mat turns signal
 
-resist (Wire _ _ w) = w
-diameter (Wire _ d _) = d
+resist (Wire _ _ w _) = w
+diameter (Wire _ d _ _) = d
+wire_density (Wire _ _ _ d) = d
 
 --at / cm
 calcH :: Shape -> Double -> Double -> Double
