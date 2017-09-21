@@ -482,9 +482,12 @@ tweakInductorRecursive ind max_curr targetL toleranceL gain steps
     | otherwise = [ind] ++ stuff
     where calc = tweakInductorCalc (ind_mat ind) max_curr targetL toleranceL (ind_driving ind) gain steps (ind_shape ind)
           stuff = (tweakInductorRecursive (head calc) max_curr targetL toleranceL (gain * 0.9) steps)
-    
+
+runInductorRecursive mat shape max_curr targetL toleranceL signal gain steps = [firstL] ++ (tweakInductorRecursive firstL max_curr targetL toleranceL gain steps)
+    where firstL = head (inductorSort (makeInductorMatShape max_curr targetL toleranceL signal (mat, shape)) totalInductorPower)
+          
 inductorOptimumWire mat shape max_curr targetL toleranceL driver = head notFullList
-    where rlist = [makeInductor mat shape x max_curr targetL toleranceL driver | x <- magnetWire]
+    where rlist = [makeInductor mat shape x max_curr targetL toleranceL driver | x <- combinedMagnetWire]
           notFullList = filter notfull rlist
     
 makeInductor mat shape wire max_curr targetL toleranceL driver = 
@@ -501,10 +504,10 @@ makeInductor mat shape wire max_curr targetL toleranceL driver =
 comboMatShapePair mats shapes = [(a, b) | a <- mats, b <- shapes]
           
 makeInductorMatShape max_curr targetL toleranceL driver pair =
-    filter (notfull) [makeInductor (fst pair) (snd pair) wire max_curr targetL toleranceL driver | wire <- magnetWire]
+    filter (notfull) [makeInductor (fst pair) (snd pair) wire max_curr targetL toleranceL driver | wire <- combinedMagnetWire]
     
 buildInductor pairs max_curr targetL toleranceL driver =
-    [makeInductor mat shape wire max_curr targetL toleranceL driver | mat <- (take 7 allMaterial), wire <- (take 4 magnetWire), shape <- specialToroids]
+    [makeInductor mat shape wire max_curr targetL toleranceL driver | mat <- (take 7 allMaterial), wire <- combinedMagnetWire, shape <- specialToroids]
           
 power_i2r (SineWave f i) r = RmsPower f (i * i * r);
 
@@ -554,6 +557,11 @@ magnetWire = [
     Wire "40AWG magnet wire" (inchToMeter 0.0037) (perMFTtoPerMeter 1079)(feetPerLbTolbsPerMeter 31949) 
     ]
 
+strandedMagnetWire = [Wire (show x ++ " strands of " ++ (wireName y)) ((x**0.5) * (diameter y)) ((resist y) / x) (x * (wire_density y)) | x <- [2..10], y <- magnetWire]
+sortedStrandedMagnetWire = inductorSort strandedMagnetWire resist
+
+combinedMagnetWire = inductorSort (strandedMagnetWire ++ magnetWire) resist
+    
 lotsToroids = [ToroidRect (mmToMeter (10 * x**1.2)) (mmToMeter (10 * y**1.2)) (mmToMeter (10 * z**1.2)) | x <- [1..20], y <- [1..20], z <- [1..5], x < y]
 specialToroids = [ToroidRect (mmToMeter 45.3) (mmToMeter 74.1) (mmToMeter z) | z <- [20..75]]
 me = ToroidRect (mmToMeter 14.7) (mmToMeter 26.9) (mmToMeter 11.2)
@@ -686,6 +694,7 @@ calcCorePower shape mat turns wire signal
           density = (calcCoreLossDensity mat (flux (h (sqrt(2) * (rms_current (signal!!0))))) (frequency (signal!!0)))
           power_list = pfc_core_loss shape mat turns signal
 
+wireName (Wire n _ _ _) = n
 resist (Wire _ _ w _) = w
 diameter (Wire _ d _ _) = d
 wire_density (Wire _ _ _ d) = d
@@ -702,3 +711,7 @@ notfull ind = (ind_filled ind) < 1.0
 
 --max wire length
 --sum [(calcWireLayerTurnLength me (magnetWire!!4) x) * fromIntegral(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
+
+
+
+--power supply calcs below
