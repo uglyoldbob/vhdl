@@ -1,7 +1,101 @@
+--import Graphics.Rendering.Chart 
+--import Graphics.Rendering.Chart.Backend.Diagrams
+--import Data.Colour
+--import Data.Colour.Names
+--import Data.Default.Class
+import Data.Maybe
+--import Control.Lens
+
 import System.IO
 import Text.Printf
 
-main = do
+{-|
+chart = toRenderable layout
+  where
+    am :: Double -> Double
+    am x = (sin (x*3.14159/45) + 1) / 2 * (sin (x*3.14159/5))
+    sinusoid2 = plot_points_style .~ filledCircles 2 (opaque red)
+              $ plot_points_values .~ (testList (manipShape 0.09 0.02) [0.03,0.031..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.09 0.02"
+              $ def
+    sinusoid2a = plot_points_style .~ filledCircles 2 (opaque green)
+              $ plot_points_values .~ (testList (manipShape 0.11 0.02) [0.030,0.031..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.11 0.02"
+              $ def
+    sinusoid2b = plot_points_style .~ filledCircles 2 (opaque aqua)
+              $ plot_points_values .~ (testList (manipShape 0.12 0.02) [0.030,0.031..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.12 0.02"
+              $ def
+    sinusoid2c = plot_points_style .~ filledCircles 2 (opaque blanchedalmond)
+              $ plot_points_values .~ (testList (manipShape 0.13 0.02) [0.030,0.031..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.13 0.02"
+              $ def
+    sinusoid2d = plot_points_style .~ filledCircles 2 (opaque brown)
+              $ plot_points_values .~ (testList (manipShape 0.13 0.02) [0.030,0.031..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.13 0.02"
+              $ def
+    sinusoid3 = plot_points_style .~ filledCircles 2 (opaque blue)
+              $ plot_points_values .~ (testList (manipShape 0.10 0.02) [0.03,0.031..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.10 0.02"
+              $ def
+    layout = layout_title .~ "Total Power"
+           $ layout_plots .~ [toPlot sinusoid2, toPlot sinusoid2a, toPlot sinusoid2b, toPlot sinusoid2c, toPlot sinusoid2d, toPlot sinusoid3]
+           $ def
+
+chart2 = toRenderable layout
+  where
+    am :: Double -> Double
+    am x = (sin (x*3.14159/45) + 1) / 2 * (sin (x*3.14159/5))
+    sinusoid2 = plot_points_style .~ filledCircles 2 (opaque red)
+              $ plot_points_values .~ (testList (manipShape 0.09 0.03) [0.02,0.021..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.09 0.03"
+              $ def
+    sinusoid2a = plot_points_style .~ filledCircles 2 (opaque green)
+              $ plot_points_values .~ (testList (manipShape 0.11 0.03) [0.020,0.021..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.11 0.03"
+              $ def
+    sinusoid2b = plot_points_style .~ filledCircles 2 (opaque aqua)
+              $ plot_points_values .~ (testList (manipShape 0.12 0.03) [0.020,0.021..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.12 0.03"
+              $ def
+    sinusoid2c = plot_points_style .~ filledCircles 2 (opaque blanchedalmond)
+              $ plot_points_values .~ (testList (manipShape 0.13 0.03) [0.020,0.021..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.13 0.03"
+              $ def
+    sinusoid2d = plot_points_style .~ filledCircles 2 (opaque brown)
+              $ plot_points_values .~ (testList (manipShape 0.13 0.03) [0.020,0.021..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.13 0.03"
+              $ def
+    sinusoid3 = plot_points_style .~ filledCircles 2 (opaque blue)
+              $ plot_points_values .~ (testList (manipShape 0.10 0.03) [0.02,0.021..0.060])
+              $ plot_points_title .~ "Inner Diameter 0.10 0.03"
+              $ def
+    layout = layout_title .~ "Total Power 0.03 thick"
+           $ layout_plots .~ [toPlot sinusoid2, toPlot sinusoid2a, toPlot sinusoid2b, toPlot sinusoid2c, toPlot sinusoid2d, toPlot sinusoid3]
+           $ def
+
+manipShape a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect x a b) 15.4 1.5e-3 0.1 pfc_signal) 
+manipShape2 a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect a x b) 15.4 1.5e-3 0.1 pfc_signal) 
+manipShape3 a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect a b x) 15.4 1.5e-3 0.1 pfc_signal) 
+-}
+main = do prettyPrintInductor (fromJust(makeInductorFindD2 PC40 (ToroidRect 0.02 0.05 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+--          renderableToFile def "example5.svg" chart
+--          renderableToFile def "example6.svg" chart2
+
+testList :: (Double -> Maybe Double) -> [Double] -> [(Double, Double)]
+testList func xin = [(x, fromJust(func x)) | x <- xin, isJust (func x)]
+
+testFunction x 
+ | x < 5 = Nothing
+ | x < 10 = Just x
+ | x < 15 = Nothing
+ | x < 20 = Just x
+ | otherwise = Nothing
+
+toroidChart a b c d e f mat max_curr targetL toleranceL driver = [inductorOptimumWire mat x max_curr targetL toleranceL driver | x <- (toroidMaker a b c d e f)]
+toroidMaker a b c d e f = [ToroidRect (mmToMeter (a*x)) (mmToMeter (b*y)) (mmToMeter (c*z)) | x <- d, y <- e, z <- f, (a*x) < (b*y)]
+
+notmain = do
     mapM prettyPrintInductor (take 5 sorted_list)
  where inductorList = makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (PC40, ToroidRect (mmToMeter 65) (mmToMeter 102) (mmToMeter 20))
        notFullList = filter notfull inductorList
@@ -34,7 +128,7 @@ linearInterpolation array a
     | otherwise = ycalc (lineCalc [lower_pair, upper_pair]) a
     where lower_pair = last (filter (fstLess a) array)
           upper_pair = head (filter (fstMore a) array)
-          last_two = [(array!!((length array)-2)), (array!!((length array)-1))]
+          last_two = drop ((length array) - 2) array
 
 arrayLess a arr = (fst arr) < a
 arrayMore a arr = (fst arr) > a
@@ -47,8 +141,430 @@ biLinearInterpolation graph_data b freq
     where lower_pair = last (filter (fstLess b) ilist)
           upper_pair = head (filter (fstMore b) ilist)
           ilist = [( (fst x), linearInterpolation (snd (x)) freq) | x <- graph_data]
-          last_two = [(ilist!!((length ilist)-2)), (ilist!!((length ilist)-1))]
+          last_two = drop ((length ilist) - 2) ilist
+
+--array helper
+makeArray x = [0..(x-1)]
+
+makeList x y = map ((*y) . (/x)) [1..x]
+
+listRange l a b = take (b - a + 1)(drop a l)
+
+gaussToTesla x = x / 10000
+oerstedToAtCm x = 250 * x / pi
+
+--to convert various units to meters
+inchToMeter x = x * 0.0254
+meterToFeet x = x / (12 * 0.0254)
+footToMeter x = inchToMeter (x * 12)
+cmToMeter x = x * 0.01
+mmToMeter x = x * 0.001
+perMFTtoPerMeter x = x / 304.8
+feetPerLbTolbsPerMeter x = 1 / (footToMeter x)
+
+coreLossConversion mat freq input = calcCoreLossDensity mat input freq
+
+graphMaker :: Material -> Double -> (Double -> Double) -> Double -> Double -> Double -> [[Char]]
+graphMaker mat freq func minx maxx steps= [do printf "%.4f, %.4f" (x) (logBase 10 (func (10**x))) | x <- values]
+    where values = [(logBase 10 minx) + (x * (logBase 10 (maxx/minx))/steps) | x <- [1..steps]]
+
+--ToroidRect is a toroid with a rectangular cross section
+--EEcore is a core made of two E shape sections
+
+--name, diameter, resistance/meter
+data Wire = Wire [Char] Double Double Double deriving (Show)
+data Shape = ToroidRect Double Double Double | EEcore Double Double deriving (Show)
+data Material = KoolMu14 | KoolMu26 | KoolMu40 | KoolMu60 | KoolMu75 | KoolMu90 | KoolMu125 | PC40 deriving (Show, Enum, Bounded)
+data SineWave = SineWave { frequency :: Double, rms_current :: Double} deriving (Show)
+data RmsPower = RmsPower Double Double deriving (Show)
+
+inTolerance value expectation percent = (value >= min_val) && (value <= max_val)
+    where min_val = (1.0 - percent) * expectation
+          max_val = (1.0 + percent) * expectation
+getPercentError value expectation = (value - expectation) / expectation
           
+findInput t guess goal tolerance
+    | abs(closeness) < tolerance = [(result, guess, closeness)]
+    | otherwise = (result, guess, closeness): (findInput t (guess / (1 + 0.5 * closeness)) goal tolerance)
+    where result = t guess
+          closeness = getPercentError result goal
+
+--things to calculate
+--number of turns to achieve inductance at peak current
+--power loss in copper
+--length of wire required
+--power loss in core
+          
+data Inductor = Inductor { 
+    ind_minL :: Double,
+    ind_maxL :: Double,
+    ind_mat :: Material,
+    ind_shape :: Shape,
+    ind_turns :: Double,
+    ind_filled :: Double,
+    ind_w_pwr :: Double,
+    ind_wire :: Wire,
+    ind_wire_length :: Double,
+    ind_c_pwr :: Double,
+    ind_driving :: [SineWave]
+    } deriving (Show)
+
+inductorImpedance ind freq = [a, b]
+    where a = 2 * pi * freq * (ind_minL ind)
+          b = 2 * pi * freq * (ind_maxL ind)
+    
+engineeringPrint :: Double -> [Char] -> [Char]
+engineeringPrint num unit
+    | num < 1e-6 = printf "%.3f n" (num / 1e-9) ++ unit
+    | num < 1e-3 = printf "%.3f u" (num / 1e-6) ++ unit
+    | num < 1 = printf "%.3f m" (num / 1e-3) ++ unit
+    | num < 1e3 = printf "%.3f" (num) ++ unit
+    | num < 1e6 = printf "%.3f K" (num / 1e3) ++ unit
+    | otherwise = printf "%.3f " num ++ unit
+
+totalInductorPower ind = (ind_w_pwr ind) + (ind_c_pwr ind)
+
+maybeInductorPower ind
+ | isJust ind = Just((ind_w_pwr (fromJust ind)) + (ind_c_pwr (fromJust ind)))
+ | otherwise = Nothing
+
+inductorSort :: [a] -> (a -> Double) -> [a]
+inductorSort [] func = []
+inductorSort (x:xs) func =
+    let smaller = inductorSort [a | a <- xs, (func a) <= (func x)] func
+        bigger = inductorSort [a | a <- xs, (func a) > (func x)] func
+    in smaller ++ [x] ++ bigger
+   
+prettyPrintInductor :: Inductor -> IO ()
+prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
+                             putStr " "
+                             print (ind_shape ind)
+                             (putStr) (engineeringPrint (ind_minL ind) "H")
+                             putStr ", "
+                             (putStr) (engineeringPrint (ind_maxL ind) "H")
+                             putStr ", "
+                             (putStr . show) (ind_turns ind)
+                             putStr " turns, "
+                             (putStr) (printf "%.1f%% full " ((ind_filled ind) * 100))
+                             (putStr . show) (ind_wire ind)
+                             putStr "\n"
+                             (putStr) (printf "%.1f feet " (meterToFeet (ind_wire_length ind)))
+                             putStr "\n"
+                             (putStr) (printf "%.2f pounds " ((wire_density (ind_wire ind)) * (ind_wire_length ind)))
+                             putStr "\n"
+                             (putStr) (engineeringPrint ((ind_w_pwr ind) + (ind_c_pwr ind)) "W")
+                             putStr ", "
+                             (putStr) (engineeringPrint (ind_w_pwr ind) "W")
+                             putStr " copper, "
+                             (putStr) (engineeringPrint (ind_c_pwr ind) "W")
+                             putStr " core"
+                             putStr "\n\n"
+
+                             
+tweakInductor :: Shape -> Double -> Double -> [Shape]                             
+tweakInductor (ToroidRect x y z) gain steps  = outp
+    where mul = map ((10**) . (*gain) . (/10)) [-steps..steps]
+          outp = [ToroidRect mx y z | mx <- map (*x) mul, my <- map (*y) mul, mz <- map (*z) mul, my > mx]
+
+headOrEmpty :: [a] -> [a]
+headOrEmpty l
+    | null l = []
+    | otherwise = [head l]
+
+maybeHead :: [a] -> Maybe a
+maybeHead l
+    | null l = Nothing
+    | otherwise = Just (head l)
+
+maybeThing thing it
+    | isJust it = thing it
+    | otherwise = Nothing
+    
+lastOrEmpty :: [a] -> [a]
+lastOrEmpty l
+    | null l = []
+    | otherwise = [last l]
+
+tweakInductorCalc mat max_curr targetL toleranceL driver gain steps shape = headOrEmpty lessPower
+    where best_result = shape
+          result_list = [inductorOptimumWire mat x max_curr targetL toleranceL driver | x <- tweak_shapes]
+          resf = inductorFilterSort result_list
+          opower = totalInductorPower (inductorOptimumWire mat shape max_curr targetL toleranceL driver)
+          lessPower = filter ((< opower) . totalInductorPower) resf
+          tweak_shapes = tweakInductor shape gain steps
+
+tweakInductorStage :: [Inductor] -> (Shape -> [Inductor]) -> [Inductor]
+tweakInductorStage [] _ = []
+tweakInductorStage (x:_) calc = newval ++ tweakInductorStage newval calc
+    where newval = calc (ind_shape x)
+
+testL = head (inductorSort (makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (PC40, me3)) totalInductorPower)
+
+tweakInductorRecursive ind max_curr targetL toleranceL gain steps
+    | null calc = []
+    | otherwise = [ind] ++ stuff
+    where calc = tweakInductorCalc (ind_mat ind) max_curr targetL toleranceL (ind_driving ind) gain steps (ind_shape ind)
+          stuff = (tweakInductorRecursive (head calc) max_curr targetL toleranceL (gain * 0.9) steps)
+
+runInductorRecursive mat shape max_curr targetL toleranceL signal gain steps = [firstL] ++ (tweakInductorRecursive firstL max_curr targetL toleranceL gain steps)
+    where firstL = head (inductorSort (makeInductorMatShape max_curr targetL toleranceL signal (mat, shape)) totalInductorPower)
+          
+inductorOptimumWire mat shape max_curr targetL toleranceL driver = head notFullList
+    where rlist = [makeInductor mat shape x max_curr targetL toleranceL driver | x <- combinedMagnetWire]
+          notFullList = filter notfull rlist
+
+powerResults mat max_curr targetL toleranceL driver a = ilist
+    where ilist = [(a, makeInductorFindWire mat x max_curr targetL toleranceL driver) | x <- shapeMaker a]
+          shapeMaker y = [ToroidRect (x/1000) 0.05 0.06 | x <- y]
+
+makeInductorFindD2 mat (ToroidRect _ od _) max_curr targetL toleranceL driver = best
+    where calcList = [makeInductorFindD1 mat (ToroidRect 0 od x) max_curr targetL toleranceL driver | x <- (makeList 50 (2*od))]
+          realList = map fromJust (filter isJust calcList)
+          sortedList = inductorSort realList totalInductorPower
+          best = maybeHead sortedList
+
+makeInductorFindD1 :: Material -> Shape -> Double -> Double -> Double -> [SineWave] -> Maybe Inductor
+makeInductorFindD1 mat (ToroidRect _ od thick) max_curr targetL toleranceL driver = best
+    where calcList = [makeInductorFindWire mat (ToroidRect x od thick) max_curr targetL toleranceL driver | x <- (makeList 50 od)]
+          realList = map fromJust (filter isJust calcList)
+          sortedList = inductorSort realList totalInductorPower
+          best = maybeHead sortedList
+
+makeInductorFindWire :: Material -> Shape -> Double -> Double -> Double -> [SineWave] -> Maybe Inductor          
+makeInductorFindWire mat shape max_curr targetL toleranceL driver = maybeHead notFullList
+    where rlist = [makeInductor mat shape x max_curr targetL toleranceL driver | x <- combinedMagnetWire]
+          notFullList = filter notfull rlist
+
+makeInductor mat shape wire max_curr targetL toleranceL driver = 
+    Inductor achieved maxl mat shape turns percent wpower wire length cpower driver
+    where turns_math = last(calcTurns shape mat wire max_curr targetL toleranceL initial_turns)
+          initial_turns = fromIntegral(truncate ((targetL / (calcShapeAL shape mat))**0.5))
+          maxl = calcL shape mat 0.01 turns
+          achieved = snd (turns_math)
+          turns = fst (turns_math)
+          wpower = (calcWirePower shape wire turns driver)
+          cpower = calcCorePower shape mat turns wire driver
+          percent = calcWindingPercent shape turns wire
+          length = (calcWireLength shape wire turns)
+
+comboMatShapePair mats shapes = [(a, b) | a <- mats, b <- shapes]
+          
+makeInductorMatShape max_curr targetL toleranceL driver pair =
+    filter (notfull) [makeInductor (fst pair) (snd pair) wire max_curr targetL toleranceL driver | wire <- combinedMagnetWire]
+    
+buildInductor pairs max_curr targetL toleranceL driver =
+    [makeInductor mat shape wire max_curr targetL toleranceL driver | mat <- (take 7 allMaterial), wire <- combinedMagnetWire, shape <- specialToroids]
+          
+power_i2r (SineWave f i) r = RmsPower f (i * i * r);
+
+power (RmsPower _ p) = p
+freq (RmsPower f _) = f
+
+total_power t = sqrt (sum [(power x) * (power x) | x <- t])
+
+allMaterial = [(minBound::Material) ..]
+
+pfc_signal = [ SineWave 60 14, SineWave 40000 1.4]
+
+--http://www.coonerwire.com/magnet-wire/
+magnetWire = [
+    Wire "8AWG magnet wire" (inchToMeter 0.1324) (perMFTtoPerMeter 0.6281) (feetPerLbTolbsPerMeter 19.91),
+    Wire "9AWG magnet wire" (inchToMeter 0.1181) (perMFTtoPerMeter 0.7925) (feetPerLbTolbsPerMeter 25.13),
+    Wire "10AWG magnet wire" (inchToMeter 0.1054) (perMFTtoPerMeter 0.9987) (feetPerLbTolbsPerMeter 31.68),
+    Wire "11AWG magnet wire" (inchToMeter 0.0941) (perMFTtoPerMeter 1.261) (feetPerLbTolbsPerMeter 39.92),
+    Wire "12AWG magnet wire" (inchToMeter 0.0840) (perMFTtoPerMeter 1.588) (feetPerLbTolbsPerMeter 50.18),
+    Wire "13AWG magnet wire" (inchToMeter 0.0750) (perMFTtoPerMeter 2.001) (feetPerLbTolbsPerMeter 63.25),
+    Wire "14AWG magnet wire" (inchToMeter 0.0670) (perMFTtoPerMeter 2.524) (feetPerLbTolbsPerMeter 80.80),
+    Wire "15AWG magnet wire" (inchToMeter 0.0599) (perMFTtoPerMeter 3.181) (feetPerLbTolbsPerMeter 100.50),
+    Wire "16AWG magnet wire" (inchToMeter 0.0534) (perMFTtoPerMeter 4.018) (feetPerLbTolbsPerMeter 126.70),
+    Wire "17AWG magnet wire" (inchToMeter 0.0478) (perMFTtoPerMeter 5.054) (feetPerLbTolbsPerMeter 159.70),
+    Wire "18AWG magnet wire" (inchToMeter 0.0426) (perMFTtoPerMeter 6.386) (feetPerLbTolbsPerMeter 201.20),
+    Wire "19AWG magnet wire" (inchToMeter 0.0382) (perMFTtoPerMeter 8.046) (feetPerLbTolbsPerMeter 253.20),
+    Wire "20AWG magnet wire" (inchToMeter 0.0341) (perMFTtoPerMeter 10.13) (feetPerLbTolbsPerMeter 319.50),
+    Wire "21AWG magnet wire" (inchToMeter 0.0306) (perMFTtoPerMeter 12.77) (feetPerLbTolbsPerMeter 402.70),
+    Wire "22AWG magnet wire" (inchToMeter 0.0273) (perMFTtoPerMeter 16.2) (feetPerLbTolbsPerMeter 507.60),
+    Wire "23AWG magnet wire" (inchToMeter 0.0244) (perMFTtoPerMeter 20.3) (feetPerLbTolbsPerMeter 650.00),
+    Wire "24AWG magnet wire" (inchToMeter 0.0218) (perMFTtoPerMeter 25.67) (feetPerLbTolbsPerMeter 805.50),
+    Wire "25AWG magnet wire" (inchToMeter 0.0195) (perMFTtoPerMeter 32.37) (feetPerLbTolbsPerMeter 1012.1),
+    Wire "26AWG magnet wire" (inchToMeter 0.0174) (perMFTtoPerMeter 41.02) (feetPerLbTolbsPerMeter 1276),
+    Wire "27AWG magnet wire" (inchToMeter 0.0156) (perMFTtoPerMeter 51.44) (feetPerLbTolbsPerMeter 1605),
+    Wire "28AWG magnet wire" (inchToMeter 0.0139) (perMFTtoPerMeter 65.31) (feetPerLbTolbsPerMeter 2820),
+    Wire "29AWG magnet wire" (inchToMeter 0.0126) (perMFTtoPerMeter 81.21) (feetPerLbTolbsPerMeter 2538),
+    Wire "30AWG magnet wire" (inchToMeter 0.0112) (perMFTtoPerMeter 103.7) (feetPerLbTolbsPerMeter 3205),
+    Wire "31AWG magnet wire" (inchToMeter 0.0100) (perMFTtoPerMeter 130.9) (feetPerLbTolbsPerMeter 4032),
+    Wire "32AWG magnet wire" (inchToMeter 0.0091) (perMFTtoPerMeter 162) (feetPerLbTolbsPerMeter 5086),
+    Wire "33AWG magnet wire" (inchToMeter 0.0081) (perMFTtoPerMeter 205.7) (feetPerLbTolbsPerMeter 6369),
+    Wire "34AWG magnet wire" (inchToMeter 0.0072) (perMFTtoPerMeter 261.3) (feetPerLbTolbsPerMeter 8039),
+    Wire "35AWG magnet wire" (inchToMeter 0.0064) (perMFTtoPerMeter 330.7) (feetPerLbTolbsPerMeter 10111),
+    Wire "36AWG magnet wire" (inchToMeter 0.0058) (perMFTtoPerMeter 414.8) (feetPerLbTolbsPerMeter 12690),
+    Wire "37AWG magnet wire" (inchToMeter 0.0052) (perMFTtoPerMeter 512.1) (feetPerLbTolbsPerMeter 16026),
+    Wire "38AWG magnet wire" (inchToMeter 0.0047) (perMFTtoPerMeter 648.2) (feetPerLbTolbsPerMeter 20243),
+    Wire "39AWG magnet wire" (inchToMeter 0.0041) (perMFTtoPerMeter 846.6) (feetPerLbTolbsPerMeter 25445),
+    Wire "40AWG magnet wire" (inchToMeter 0.0037) (perMFTtoPerMeter 1079)(feetPerLbTolbsPerMeter 31949) 
+    ]
+
+strandedMagnetWire = [Wire (show x ++ " strands of " ++ (wireName y)) ((x**0.5) * (diameter y)) ((resist y) / x) (x * (wire_density y)) | x <- [2..10], y <- magnetWire]
+sortedStrandedMagnetWire = inductorSort notTooLarge resist
+    where notTooLarge = filter wireNotTooLarge strandedMagnetWire
+
+wireNotTooLarge x = (diameter x) < (diameter (magnetWire!!0))
+    
+combinedMagnetWire = inductorSort (notTooLarge ++ magnetWire) resist
+    where notTooLarge = filter wireNotTooLarge strandedMagnetWire
+   
+lotsToroids = [ToroidRect (mmToMeter (10 * x**1.2)) (mmToMeter (10 * y**1.2)) (mmToMeter (10 * z**1.2)) | x <- [1..20], y <- [1..20], z <- [1..5], x < y]
+specialToroids = [ToroidRect (mmToMeter 45.3) (mmToMeter 74.1) (mmToMeter z) | z <- [20..75]]
+me = ToroidRect (mmToMeter 14.7) (mmToMeter 26.9) (mmToMeter 11.2)
+me2 = ToroidRect (mmToMeter 102.4) (mmToMeter 165.1) (mmToMeter 31.75)
+me3 = ToroidRect (mmToMeter 65) (mmToMeter 102) (mmToMeter 20)
+
+calcAL relPerm area length = (absolute_permeability) * relPerm * area / length
+calcShapeAL t mat = calcAL (permeability mat) (calcMagArea t) (calcMagLength t)
+calcL t mat current turns = (calcShapeAL t mat) * turns * turns * (permeability_bias mat (calcH t turns current)) 
+
+calcTurns shape mat wire current targetL tolerance guess
+    | abs(closeness) < tolerance = [(guess, result)]
+    | result > targetL = [(guess, result)]
+    | guess > (calcWireMaxTurns shape wire) = [(guess * 10, 0)]
+    | otherwise = (guess, result): (calcTurns shape mat wire current targetL tolerance (newguess))
+    where result = calcL shape mat current guess
+          closeness = getPercentError result targetL
+          newguess = (guess + 1)
+
+permeability :: Material -> Double
+permeability x = what x
+ where what KoolMu14 = 14
+       what KoolMu26 = 26
+       what KoolMu40 = 40
+       what KoolMu60 = 60
+       what KoolMu75 = 75
+       what KoolMu90 = 90
+       what KoolMu125 = 125
+       what PC40 = 2300
+
+permeability_bias x h =  what x
+ where what KoolMu14 = 0.01 / (0.01 + 8.220e-8 * h**1.990)
+       what KoolMu26 = 0.01 / (0.01 + 7.979e-7 * h**1.819)
+       what KoolMu40 = 0.01 / (0.01 + 3.213e-6 * h**1.704)
+       what KoolMu60 = 0.01 / (0.01 + 5.184e-6 * h**1.749)
+       what KoolMu75 = 0.01 / (0.01 + 1.272e-5 * h**1.664)
+       what KoolMu90 = 0.01 / (0.01 + 2.698e-5 * h**1.558)
+       what KoolMu125 = 0.01 / (0.01 + 6.345e-5 * h**1.462)
+       what PC40 = (calcB PC40 h) / ((permeability x) * 100 * h * absolute_permeability)
+
+--material and H input, output B in tesla
+calcB :: Material -> Double -> Double
+calcB mat j
+ | j > 0 = what mat
+ | otherwise = (-(what mat))
+ where h = abs(j)
+       what KoolMu14 =  ((1.105e-1 + (1.301e-2 * h) + (6.115e-4 * h * h)) / (1 + (1.386e-1 * h) + (5.735e-4 * h * h))) ** 1.760
+       what KoolMu26 =  ((1.008e-1 + (1.452e-2 * h) + (7.846e-4 * h * h)) / (1 + (1.035e-1 * h) + (7.573e-4 * h * h))) ** 1.754
+       what KoolMu40 =  ((5.180e-2 + (2.132e-2 * h) + (7.941e-4 * h * h)) / (1 + (8.447e-2 * h) + (7.652e-4 * h * h))) ** 1.756
+       what KoolMu60 =  ((5.214e-2 + (2.299e-2 * h) + (8.537e-4 * h * h)) / (1 + (7.029e-2 * h) + (8.183e-4 * h * h))) ** 1.658
+       what KoolMu75 =  ((4.489e-2 + (2.593e-2 * h) + (7.949e-4 * h * h)) / (1 + (6.463e-2 * h) + (7.925e-4 * h * h))) ** 1.595
+       what KoolMu90 =  ((4.182e-2 + (2.990e-2 * h) + (7.826e-4 * h * h)) / (1 + (6.542e-2 * h) + (7.669e-4 * h * h))) ** 1.569
+       what KoolMu125 = ((1.414e-2 + (2.850e-2 * h) + (1.135e-3 * h * h)) / (1 + (7.550e-2 * h) + (1.088e-3 * h * h))) ** 1.274
+       what PC40 = (linearInterpolation pc40_bh_60c (h * 100)) * 0.001
+
+       --  - 904.56
+calcCoreLossDensity mat flux freq = what mat
+ where what KoolMu14 =  1 * 21.5 * (flux ** 1.000) * ((freq/1000) ** 1.330)
+       what KoolMu26 =  1 * 45.5 * (flux ** 1.774) * ((freq/1000) ** 1.460)
+       what KoolMu40 =  1 * 45.5 * (flux ** 1.774) * ((freq/1000) ** 1.460)
+       what KoolMu60 =  1 * 62.7 * (flux ** 1.781) * ((freq/1000) ** 1.360)
+       what KoolMu75 =  1 * 146.8 * (flux ** 2.022) * ((freq/1000) ** 1.330)
+       what KoolMu90 =  1 * 146.8 * (flux ** 2.022) * ((freq/1000) ** 1.330)
+       what KoolMu125 = 1 * 71.9 * (flux ** 1.928) * ((freq/1000) ** 1.470)
+       what PC40 = biLinearInterpolation pc40_cl_60c flux freq
+
+wire_power :: Shape -> Wire -> Double -> [SineWave] -> Double
+wire_power (ToroidRect a b c) d e f =  calcWirePower (ToroidRect a b c) d e f
+wire_power (EEcore a b) c d e = a * d
+       
+calcMagLength (ToroidRect id od thick) = pi * (id + od) * 0.5
+calcMagArea (ToroidRect id od thick) = (od-id) * 0.5 * thick
+
+calcWindingArea :: Shape -> Double
+calcWindingArea (ToroidRect id od thick) = pi * 0.25 * id * id
+
+calcWindingPercent s turns (Wire _ d _ _) = (pi * 0.25 * d * d * turns) / (calcWindingArea s)
+
+calcWireLayers :: Shape -> Wire -> Double
+calcWireLayers (ToroidRect id od thick) (Wire _ d _ _) = fromIntegral(floor ((sqrt 0.3) * id * 0.5 / d))
+
+calcWireLayerTurns :: Shape -> Wire -> Double -> Double
+calcWireLayerTurns (ToroidRect id od thick) (Wire _ d _ _) n = fromIntegral (floor ((id - ((n - 0.5) * d)) * pi / d))
+
+calcWireMaxTurns t w = fromIntegral(floor((calcWindingArea t) / (pi * (diameter w)**2 * 0.25)))
+
+calcWireLayerTurnLength :: Shape -> Wire -> Double -> Double
+calcWireLayerTurnLength (ToroidRect id od thick) (Wire _ d _ _) n = od-id+thick+thick+d+d+4*d*(n-1)
+
+calcWireMaxLength t w = sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
+calcWireMaxResist t w = (resist w) * sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
+
+calcWireResist t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxResist t w)
+calcWireLength t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxLength t w)
+calcWirePower t w turns s = total_power [power_i2r x (calcWireResist t w turns) | x <- s]
+
+calcVolume :: Shape -> Double
+calcVolume (ToroidRect id od thick) = ((od * od * 0.25) - (id * id * 0.25)) * pi * thick
+
+pfc_core_loss :: Shape -> Material -> Double -> [SineWave] -> [Double]
+pfc_core_loss shape mat turns signal
+    | low_freq > 0.0 = [calcCorePowerMinMax shape mat turns high_freq (calc * (1 - (high_peak / low_peak))) (calc * (1 + (high_peak / low_peak))) | calc <- range]
+    | otherwise = [calcCorePowerMinMax shape mat turns high_freq ((rms_current (signal!!0)) - high_peak) ((rms_current (signal!!0)) + high_peak)]
+    where low_freq = (frequency (signal!!0))
+          high_freq = (frequency (signal!!1))
+          low_peak = (rms_current (signal!!0)) * sqrt(2)
+          high_peak = (rms_current (signal!!1)) * sqrt(2)
+          volume = calcVolume shape
+          h = calcH shape turns
+          density x y = (calcCoreLossDensity mat (calcB mat (h x)) y)
+          range = (map ((low_peak * ) . sin . (0.01*pi*)) [0..99])
+
+calcCorePowerMinMax shape mat turns fr minI maxI = density * volume * 1000
+    where volume = calcVolume shape
+          minh = calcH shape turns minI
+          maxh = calcH shape turns maxI
+          density = (calcCoreLossDensity mat deltab fr)
+          deltab = ((calcB mat maxh) - (calcB mat minh)) * 0.5
+
+rmsCalc :: [Double] -> Double
+rmsCalc list = sqrt (((sum) (map (** 2) list)) / fromIntegral(length list))
+          
+calcCorePower :: Shape -> Material -> Double -> Wire -> [SineWave] -> Double
+calcCorePower shape mat turns wire signal
+    | (length signal == 2) = rmsCalc power_list
+    | (length signal == 1) = density * volume * 1000
+    where volume = calcVolume shape
+          flux = calcB mat
+          h = calcH shape turns
+          density = (calcCoreLossDensity mat (flux (h (sqrt(2) * (rms_current (signal!!0))))) (frequency (signal!!0)))
+          power_list = pfc_core_loss shape mat turns signal
+
+wireName (Wire n _ _ _) = n
+resist (Wire _ _ w _) = w
+diameter (Wire _ d _ _) = d
+wire_density (Wire _ _ _ d) = d
+
+--at / cm
+calcH :: Shape -> Double -> Double -> Double
+calcH (ToroidRect id od thick) turns current = 0.01 * turns * current / (pi * (id + od) * 0.5)
+
+notfull ind = (ind_filled ind) < 0.7
+
+--[(calcWireLayerTurnLength me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
+
+--sum [(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
+
+--max wire length
+--sum [(calcWireLayerTurnLength me (magnetWire!!4) x) * fromIntegral(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
+
+
+
+
 --[(tesla, [(hertz, kw/m^3)]]
 pc40_cl_60c = [ 
     (0.05, 
@@ -334,384 +850,3 @@ pc40_bh_60c = [ (0, 0),
                 (1.50528200948540e+003, 4.60568251339301e+002),
                 (1.56978887270300e+003, 4.61401857993628e+002),
                 (1.59755552126534e+003, 4.61401857993628e+002) ]
-
---array helper
-makeArray x = [0..(x-1)]
-
-listRange l a b = take (b - a + 1)(drop a l)
-
-gaussToTesla x = x / 10000
-oerstedToAtCm x = 250 * x / pi
-
---to convert various units to meters
-inchToMeter x = x * 0.0254
-meterToFeet x = x / (12 * 0.0254)
-footToMeter x = inchToMeter (x * 12)
-cmToMeter x = x * 0.01
-mmToMeter x = x * 0.001
-perMFTtoPerMeter x = x / 304.8
-feetPerLbTolbsPerMeter x = 1 / (footToMeter x)
-
-coreLossConversion mat freq input = calcCoreLossDensity mat input freq
-
-graphMaker :: Material -> Double -> (Double -> Double) -> Double -> Double -> Double -> [[Char]]
-graphMaker mat freq func minx maxx steps= [do printf "%.4f, %.4f" (x) (logBase 10 (func (10**x))) | x <- values]
-    where values = [(logBase 10 minx) + (x * (logBase 10 (maxx/minx))/steps) | x <- [1..steps]]
-
---ToroidRect is a toroid with a rectangular cross section
---EEcore is a core made of two E shape sections
-
---name, diameter, resistance/meter
-data Wire = Wire [Char] Double Double Double deriving (Show)
-data Shape = ToroidRect Double Double Double | EEcore Double Double deriving (Show)
-data Material = KoolMu14 | KoolMu26 | KoolMu40 | KoolMu60 | KoolMu75 | KoolMu90 | KoolMu125 | PC40 deriving (Show, Enum, Bounded)
-data SineWave = SineWave { frequency :: Double, rms_current :: Double} deriving (Show)
-data RmsPower = RmsPower Double Double deriving (Show)
-
-inTolerance value expectation percent = (value >= min_val) && (value <= max_val)
-    where min_val = (1.0 - percent) * expectation
-          max_val = (1.0 + percent) * expectation
-getPercentError value expectation = (value - expectation) / expectation
-          
-findInput t guess goal tolerance
-    | abs(closeness) < tolerance = [(result, guess, closeness)]
-    | otherwise = (result, guess, closeness): (findInput t (guess / (1 + 0.5 * closeness)) goal tolerance)
-    where result = t guess
-          closeness = getPercentError result goal
-
---things to calculate
---number of turns to achieve inductance at peak current
---power loss in copper
---length of wire required
---power loss in core
-          
-data Inductor = Inductor { 
-    ind_minL :: Double,
-    ind_maxL :: Double,
-    ind_mat :: Material,
-    ind_shape :: Shape,
-    ind_turns :: Double,
-    ind_filled :: Double,
-    ind_w_pwr :: Double,
-    ind_wire :: Wire,
-    ind_wire_length :: Double,
-    ind_c_pwr :: Double,
-    ind_driving :: [SineWave]
-    } deriving (Show)
-
-inductorImpedance ind freq = [a, b]
-    where a = 2 * pi * freq * (ind_minL ind)
-          b = 2 * pi * freq * (ind_maxL ind)
-    
-engineeringPrint :: Double -> [Char] -> [Char]
-engineeringPrint num unit
-    | num < 1e-6 = printf "%.3f n" (num / 1e-9) ++ unit
-    | num < 1e-3 = printf "%.3f u" (num / 1e-6) ++ unit
-    | num < 1 = printf "%.3f m" (num / 1e-3) ++ unit
-    | num < 1e3 = printf "%.3f" (num) ++ unit
-    | num < 1e6 = printf "%.3f K" (num / 1e3) ++ unit
-    | otherwise = printf "%.3f " num ++ unit
-
-totalInductorPower ind = (ind_w_pwr ind) + (ind_c_pwr ind)
-
-inductorSort :: [a] -> (a -> Double) -> [a]
-inductorSort [] func = []
-inductorSort (x:xs) func =
-    let smaller = inductorSort [a | a <- xs, (func a) <= (func x)] func
-        bigger = inductorSort [a | a <- xs, (func a) > (func x)] func
-    in smaller ++ [x] ++ bigger
-   
-prettyPrintInductor :: Inductor -> IO ()
-prettyPrintInductor ind = do (putStr . show) (ind_mat ind)
-                             putStr " "
-                             print (ind_shape ind)
-                             (putStr) (engineeringPrint (ind_minL ind) "H")
-                             putStr ", "
-                             (putStr) (engineeringPrint (ind_maxL ind) "H")
-                             putStr ", "
-                             (putStr . show) (ind_turns ind)
-                             putStr " turns, "
-                             (putStr) (printf "%.1f%% full " ((ind_filled ind) * 100))
-                             (putStr . show) (ind_wire ind)
-                             putStr "\n"
-                             (putStr) (printf "%.1f feet " (meterToFeet (ind_wire_length ind)))
-                             putStr "\n"
-                             (putStr) (printf "%.1f pounds " ((wire_density (ind_wire ind)) * (ind_wire_length ind)))
-                             putStr "\n"
-                             (putStr) (engineeringPrint ((ind_w_pwr ind) + (ind_c_pwr ind)) "W")
-                             putStr ", "
-                             (putStr) (engineeringPrint (ind_w_pwr ind) "W")
-                             putStr " copper, "
-                             (putStr) (engineeringPrint (ind_c_pwr ind) "W")
-                             putStr " core"
-                             putStr "\n\n"
-
-                             
-tweakInductor :: Shape -> Double -> Double -> [Shape]                             
-tweakInductor (ToroidRect x y z) gain steps  = outp
-    where mul = map ((10**) . (*gain) . (/10)) [-steps..steps]
-          outp = [ToroidRect mx my mz | mx <- map (*x) mul, my <- map (*y) mul, mz <- map (*z) mul, my > mx]
-
-headOrEmpty :: [a] -> [a]
-headOrEmpty l
-    | null l = []
-    | otherwise = [head l]
-
-lastOrEmpty :: [a] -> [a]
-lastOrEmpty l
-    | null l = []
-    | otherwise = [last l]
-          
-tweakInductorCalc mat max_curr targetL toleranceL driver gain steps shape = headOrEmpty lessPower
-    where best_result = shape
-          result_list = [inductorOptimumWire mat x max_curr targetL toleranceL driver | x <- tweak_shapes]
-          resf = inductorFilterSort result_list
-          opower = totalInductorPower (inductorOptimumWire mat shape max_curr targetL toleranceL driver)
-          lessPower = filter ((< opower) . totalInductorPower) resf
-          tweak_shapes = tweakInductor shape gain steps
-
-tweakInductorStage :: [Inductor] -> (Shape -> [Inductor]) -> [Inductor]
-tweakInductorStage [] _ = []
-tweakInductorStage (x:_) calc = newval ++ tweakInductorStage newval calc
-    where newval = calc (ind_shape x)
-
-testL = head (inductorSort (makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (PC40, me3)) totalInductorPower)
-
-tweakInductorRecursive ind max_curr targetL toleranceL gain steps
-    | null calc = []
-    | otherwise = [ind] ++ stuff
-    where calc = tweakInductorCalc (ind_mat ind) max_curr targetL toleranceL (ind_driving ind) gain steps (ind_shape ind)
-          stuff = (tweakInductorRecursive (head calc) max_curr targetL toleranceL (gain * 0.9) steps)
-
-runInductorRecursive mat shape max_curr targetL toleranceL signal gain steps = [firstL] ++ (tweakInductorRecursive firstL max_curr targetL toleranceL gain steps)
-    where firstL = head (inductorSort (makeInductorMatShape max_curr targetL toleranceL signal (mat, shape)) totalInductorPower)
-          
-inductorOptimumWire mat shape max_curr targetL toleranceL driver = head notFullList
-    where rlist = [makeInductor mat shape x max_curr targetL toleranceL driver | x <- combinedMagnetWire]
-          notFullList = filter notfull rlist
-    
-makeInductor mat shape wire max_curr targetL toleranceL driver = 
-    Inductor achieved maxl mat shape turns percent wpower wire length cpower driver
-    where turns_math = last(calcTurns shape mat wire max_curr targetL toleranceL 1)
-          maxl = calcL shape mat 0.01 turns
-          achieved = snd (turns_math)
-          turns = fst (turns_math)
-          wpower = (calcWirePower shape wire turns driver)
-          cpower = calcCorePower shape mat turns wire driver
-          percent = calcWindingPercent shape turns wire
-          length = (calcWireLength shape wire turns)
-
-comboMatShapePair mats shapes = [(a, b) | a <- mats, b <- shapes]
-          
-makeInductorMatShape max_curr targetL toleranceL driver pair =
-    filter (notfull) [makeInductor (fst pair) (snd pair) wire max_curr targetL toleranceL driver | wire <- combinedMagnetWire]
-    
-buildInductor pairs max_curr targetL toleranceL driver =
-    [makeInductor mat shape wire max_curr targetL toleranceL driver | mat <- (take 7 allMaterial), wire <- combinedMagnetWire, shape <- specialToroids]
-          
-power_i2r (SineWave f i) r = RmsPower f (i * i * r);
-
-power (RmsPower _ p) = p
-freq (RmsPower f _) = f
-
-total_power t = sqrt (sum [(power x) * (power x) | x <- t])
-
-allMaterial = [(minBound::Material) ..]
-
-pfc_signal = [ SineWave 60 14, SineWave 40000 1.4]
-
---http://www.coonerwire.com/magnet-wire/
-magnetWire = [
-    Wire "8AWG magnet wire" (inchToMeter 0.1324) (perMFTtoPerMeter 0.6281) (feetPerLbTolbsPerMeter 19.91),
-    Wire "9AWG magnet wire" (inchToMeter 0.1181) (perMFTtoPerMeter 0.7925) (feetPerLbTolbsPerMeter 25.13),
-    Wire "10AWG magnet wire" (inchToMeter 0.1054) (perMFTtoPerMeter 0.9987) (feetPerLbTolbsPerMeter 31.68),
-    Wire "11AWG magnet wire" (inchToMeter 0.0941) (perMFTtoPerMeter 1.261) (feetPerLbTolbsPerMeter 39.92),
-    Wire "12AWG magnet wire" (inchToMeter 0.0840) (perMFTtoPerMeter 1.588) (feetPerLbTolbsPerMeter 50.18),
-    Wire "13AWG magnet wire" (inchToMeter 0.0750) (perMFTtoPerMeter 2.001) (feetPerLbTolbsPerMeter 63.25),
-    Wire "14AWG magnet wire" (inchToMeter 0.0670) (perMFTtoPerMeter 2.524) (feetPerLbTolbsPerMeter 80.80),
-    Wire "15AWG magnet wire" (inchToMeter 0.0599) (perMFTtoPerMeter 3.181) (feetPerLbTolbsPerMeter 100.50),
-    Wire "16AWG magnet wire" (inchToMeter 0.0534) (perMFTtoPerMeter 4.018) (feetPerLbTolbsPerMeter 126.70),
-    Wire "17AWG magnet wire" (inchToMeter 0.0478) (perMFTtoPerMeter 5.054) (feetPerLbTolbsPerMeter 159.70),
-    Wire "18AWG magnet wire" (inchToMeter 0.0426) (perMFTtoPerMeter 6.386) (feetPerLbTolbsPerMeter 201.20),
-    Wire "19AWG magnet wire" (inchToMeter 0.0382) (perMFTtoPerMeter 8.046) (feetPerLbTolbsPerMeter 253.20),
-    Wire "20AWG magnet wire" (inchToMeter 0.0341) (perMFTtoPerMeter 10.13) (feetPerLbTolbsPerMeter 319.50),
-    Wire "21AWG magnet wire" (inchToMeter 0.0306) (perMFTtoPerMeter 12.77) (feetPerLbTolbsPerMeter 402.70),
-    Wire "22AWG magnet wire" (inchToMeter 0.0273) (perMFTtoPerMeter 16.2) (feetPerLbTolbsPerMeter 507.60),
-    Wire "23AWG magnet wire" (inchToMeter 0.0244) (perMFTtoPerMeter 20.3) (feetPerLbTolbsPerMeter 650.00),
-    Wire "24AWG magnet wire" (inchToMeter 0.0218) (perMFTtoPerMeter 25.67) (feetPerLbTolbsPerMeter 805.50),
-    Wire "25AWG magnet wire" (inchToMeter 0.0195) (perMFTtoPerMeter 32.37) (feetPerLbTolbsPerMeter 1012.1),
-    Wire "26AWG magnet wire" (inchToMeter 0.0174) (perMFTtoPerMeter 41.02) (feetPerLbTolbsPerMeter 1276),
-    Wire "27AWG magnet wire" (inchToMeter 0.0156) (perMFTtoPerMeter 51.44) (feetPerLbTolbsPerMeter 1605),
-    Wire "28AWG magnet wire" (inchToMeter 0.0139) (perMFTtoPerMeter 65.31) (feetPerLbTolbsPerMeter 2820),
-    Wire "29AWG magnet wire" (inchToMeter 0.0126) (perMFTtoPerMeter 81.21) (feetPerLbTolbsPerMeter 2538),
-    Wire "30AWG magnet wire" (inchToMeter 0.0112) (perMFTtoPerMeter 103.7) (feetPerLbTolbsPerMeter 3205),
-    Wire "31AWG magnet wire" (inchToMeter 0.0100) (perMFTtoPerMeter 130.9) (feetPerLbTolbsPerMeter 4032),
-    Wire "32AWG magnet wire" (inchToMeter 0.0091) (perMFTtoPerMeter 162) (feetPerLbTolbsPerMeter 5086),
-    Wire "33AWG magnet wire" (inchToMeter 0.0081) (perMFTtoPerMeter 205.7) (feetPerLbTolbsPerMeter 6369),
-    Wire "34AWG magnet wire" (inchToMeter 0.0072) (perMFTtoPerMeter 261.3) (feetPerLbTolbsPerMeter 8039),
-    Wire "35AWG magnet wire" (inchToMeter 0.0064) (perMFTtoPerMeter 330.7) (feetPerLbTolbsPerMeter 10111),
-    Wire "36AWG magnet wire" (inchToMeter 0.0058) (perMFTtoPerMeter 414.8) (feetPerLbTolbsPerMeter 12690),
-    Wire "37AWG magnet wire" (inchToMeter 0.0052) (perMFTtoPerMeter 512.1) (feetPerLbTolbsPerMeter 16026),
-    Wire "38AWG magnet wire" (inchToMeter 0.0047) (perMFTtoPerMeter 648.2) (feetPerLbTolbsPerMeter 20243),
-    Wire "39AWG magnet wire" (inchToMeter 0.0041) (perMFTtoPerMeter 846.6) (feetPerLbTolbsPerMeter 25445),
-    Wire "40AWG magnet wire" (inchToMeter 0.0037) (perMFTtoPerMeter 1079)(feetPerLbTolbsPerMeter 31949) 
-    ]
-
-strandedMagnetWire = [Wire (show x ++ " strands of " ++ (wireName y)) ((x**0.5) * (diameter y)) ((resist y) / x) (x * (wire_density y)) | x <- [2..10], y <- magnetWire]
-sortedStrandedMagnetWire = inductorSort strandedMagnetWire resist
-
-combinedMagnetWire = inductorSort (strandedMagnetWire ++ magnetWire) resist
-    
-lotsToroids = [ToroidRect (mmToMeter (10 * x**1.2)) (mmToMeter (10 * y**1.2)) (mmToMeter (10 * z**1.2)) | x <- [1..20], y <- [1..20], z <- [1..5], x < y]
-specialToroids = [ToroidRect (mmToMeter 45.3) (mmToMeter 74.1) (mmToMeter z) | z <- [20..75]]
-me = ToroidRect (mmToMeter 14.7) (mmToMeter 26.9) (mmToMeter 11.2)
-me2 = ToroidRect (mmToMeter 102.4) (mmToMeter 165.1) (mmToMeter 31.75)
-me3 = ToroidRect (mmToMeter 65) (mmToMeter 102) (mmToMeter 20)
-
-calcAL relPerm area length = (absolute_permeability) * relPerm * area / length
-calcShapeAL t mat = calcAL (permeability mat) (calcMagArea t) (calcMagLength t)
-calcL t mat current turns = (calcShapeAL t mat) * turns * turns * (permeability_bias mat (calcH t turns current)) 
-
-calcTurns shape mat wire current targetL tolerance guess
-    | abs(closeness) < tolerance = [(guess, result)]
-    | result > targetL = [(guess, result)]
-    | guess > (calcWireMaxTurns shape wire) = [(guess * 10, 0)]
-    | otherwise = (guess, result): (calcTurns shape mat wire current targetL tolerance (newguess))
-    where result = calcL shape mat current guess
-          closeness = getPercentError result targetL
-          newguess = (guess + 1)
-
-permeability :: Material -> Double
-permeability x = what x
- where what KoolMu14 = 14
-       what KoolMu26 = 26
-       what KoolMu40 = 40
-       what KoolMu60 = 60
-       what KoolMu75 = 75
-       what KoolMu90 = 90
-       what KoolMu125 = 125
-       what PC40 = 2300
-
-permeability_bias x h =  what x
- where what KoolMu14 = 0.01 / (0.01 + 8.220e-8 * h**1.990)
-       what KoolMu26 = 0.01 / (0.01 + 7.979e-7 * h**1.819)
-       what KoolMu40 = 0.01 / (0.01 + 3.213e-6 * h**1.704)
-       what KoolMu60 = 0.01 / (0.01 + 5.184e-6 * h**1.749)
-       what KoolMu75 = 0.01 / (0.01 + 1.272e-5 * h**1.664)
-       what KoolMu90 = 0.01 / (0.01 + 2.698e-5 * h**1.558)
-       what KoolMu125 = 0.01 / (0.01 + 6.345e-5 * h**1.462)
-       what PC40 = (calcB PC40 h) / ((permeability x) * 100 * h * absolute_permeability)
-
---material and H input, output B in tesla
-calcB :: Material -> Double -> Double
-calcB mat j
- | j > 0 = what mat
- | otherwise = (-(what mat))
- where h = abs(j)
-       what KoolMu14 =  ((1.105e-1 + (1.301e-2 * h) + (6.115e-4 * h * h)) / (1 + (1.386e-1 * h) + (5.735e-4 * h * h))) ** 1.760
-       what KoolMu26 =  ((1.008e-1 + (1.452e-2 * h) + (7.846e-4 * h * h)) / (1 + (1.035e-1 * h) + (7.573e-4 * h * h))) ** 1.754
-       what KoolMu40 =  ((5.180e-2 + (2.132e-2 * h) + (7.941e-4 * h * h)) / (1 + (8.447e-2 * h) + (7.652e-4 * h * h))) ** 1.756
-       what KoolMu60 =  ((5.214e-2 + (2.299e-2 * h) + (8.537e-4 * h * h)) / (1 + (7.029e-2 * h) + (8.183e-4 * h * h))) ** 1.658
-       what KoolMu75 =  ((4.489e-2 + (2.593e-2 * h) + (7.949e-4 * h * h)) / (1 + (6.463e-2 * h) + (7.925e-4 * h * h))) ** 1.595
-       what KoolMu90 =  ((4.182e-2 + (2.990e-2 * h) + (7.826e-4 * h * h)) / (1 + (6.542e-2 * h) + (7.669e-4 * h * h))) ** 1.569
-       what KoolMu125 = ((1.414e-2 + (2.850e-2 * h) + (1.135e-3 * h * h)) / (1 + (7.550e-2 * h) + (1.088e-3 * h * h))) ** 1.274
-       what PC40 = (linearInterpolation pc40_bh_60c (h * 100)) * 0.001
-
-       --  - 904.56
-calcCoreLossDensity mat flux freq = what mat
- where what KoolMu14 =  1 * 21.5 * (flux ** 1.000) * ((freq/1000) ** 1.330)
-       what KoolMu26 =  1 * 45.5 * (flux ** 1.774) * ((freq/1000) ** 1.460)
-       what KoolMu40 =  1 * 45.5 * (flux ** 1.774) * ((freq/1000) ** 1.460)
-       what KoolMu60 =  1 * 62.7 * (flux ** 1.781) * ((freq/1000) ** 1.360)
-       what KoolMu75 =  1 * 146.8 * (flux ** 2.022) * ((freq/1000) ** 1.330)
-       what KoolMu90 =  1 * 146.8 * (flux ** 2.022) * ((freq/1000) ** 1.330)
-       what KoolMu125 = 1 * 71.9 * (flux ** 1.928) * ((freq/1000) ** 1.470)
-       what PC40 = biLinearInterpolation pc40_cl_60c flux freq
-
-wire_power :: Shape -> Wire -> Double -> [SineWave] -> Double
-wire_power (ToroidRect a b c) d e f =  calcWirePower (ToroidRect a b c) d e f
-wire_power (EEcore a b) c d e = a * d
-       
-calcMagLength (ToroidRect id od thick) = pi * (id + od) * 0.5
-calcMagArea (ToroidRect id od thick) = (od-id) * 0.5 * thick
-
-calcWindingArea :: Shape -> Double
-calcWindingArea (ToroidRect id od thick) = pi * 0.25 * id * id
-
-calcWindingPercent s turns (Wire _ d _ _) = (pi * 0.25 * d * d * turns) / (calcWindingArea s)
-
-calcWireLayers :: Shape -> Wire -> Double
-calcWireLayers (ToroidRect id od thick) (Wire _ d _ _) = fromIntegral(floor ((sqrt 0.3) * id * 0.5 / d))
-
-calcWireLayerTurns :: Shape -> Wire -> Double -> Double
-calcWireLayerTurns (ToroidRect id od thick) (Wire _ d _ _) n = fromIntegral (floor ((id - ((n - 0.5) * d)) * pi / d))
-
-calcWireMaxTurns t w = sum [(calcWireLayerTurns t w x) | x <- [1..( (calcWireLayers t w))]]
-
-calcWireLayerTurnLength :: Shape -> Wire -> Double -> Double
-calcWireLayerTurnLength (ToroidRect id od thick) (Wire _ d _ _) n = od-id+thick+thick+d+d+4*d*(n-1)
-
-calcWireMaxLength t w = sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
-calcWireMaxResist t w = (resist w) * sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
-
-calcWireResist t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxResist t w)
-calcWireLength t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxLength t w)
-calcWirePower t w turns s = total_power [power_i2r x (calcWireResist t w turns) | x <- s]
-
-calcVolume :: Shape -> Double
-calcVolume (ToroidRect id od thick) = ((od * od * 0.25) - (id * id * 0.25)) * pi * thick
-
-pfc_core_loss :: Shape -> Material -> Double -> [SineWave] -> [Double]
-pfc_core_loss shape mat turns signal
-    | low_freq > 0.0 = [calcCorePowerMinMax shape mat turns high_freq (calc * (1 - (high_peak / low_peak))) (calc * (1 + (high_peak / low_peak))) | calc <- range]
-    | otherwise = [calcCorePowerMinMax shape mat turns high_freq ((rms_current (signal!!0)) - high_peak) ((rms_current (signal!!0)) + high_peak)]
-    where low_freq = (frequency (signal!!0))
-          high_freq = (frequency (signal!!1))
-          low_peak = (rms_current (signal!!0)) * sqrt(2)
-          high_peak = (rms_current (signal!!1)) * sqrt(2)
-          volume = calcVolume shape
-          h = calcH shape turns
-          density x y = (calcCoreLossDensity mat (calcB mat (h x)) y)
-          range = (map ((low_peak * ) . sin . (0.01*pi*)) [0..99])
-
-calcCorePowerMinMax shape mat turns fr minI maxI = density * volume * 1000
-    where volume = calcVolume shape
-          minh = calcH shape turns minI
-          maxh = calcH shape turns maxI
-          density = (calcCoreLossDensity mat deltab fr)
-          deltab = ((calcB mat maxh) - (calcB mat minh)) * 0.5
-
-rmsCalc :: [Double] -> Double
-rmsCalc list = sqrt (((sum) (map (** 2) list)) / fromIntegral(length list))
-          
-calcCorePower :: Shape -> Material -> Double -> Wire -> [SineWave] -> Double
-calcCorePower shape mat turns wire signal
-    | (length signal == 2) = rmsCalc power_list
-    | (length signal == 1) = density * volume * 1000
-    where volume = calcVolume shape
-          flux = calcB mat
-          h = calcH shape turns
-          density = (calcCoreLossDensity mat (flux (h (sqrt(2) * (rms_current (signal!!0))))) (frequency (signal!!0)))
-          power_list = pfc_core_loss shape mat turns signal
-
-wireName (Wire n _ _ _) = n
-resist (Wire _ _ w _) = w
-diameter (Wire _ d _ _) = d
-wire_density (Wire _ _ _ d) = d
-
---at / cm
-calcH :: Shape -> Double -> Double -> Double
-calcH (ToroidRect id od thick) turns current = 0.01 * turns * current / (pi * (id + od) * 0.5)
-
-notfull ind = (ind_filled ind) < 1.0
-
---[(calcWireLayerTurnLength me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
-
---sum [(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
-
---max wire length
---sum [(calcWireLayerTurnLength me (magnetWire!!4) x) * fromIntegral(calcWireLayerTurns me (magnetWire!!4) x) | x <- [1..(fromIntegral (calcWireLayers me (magnetWire!!4)))]]
-
-
-
---power supply calcs below
