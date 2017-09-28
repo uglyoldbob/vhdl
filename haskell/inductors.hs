@@ -78,7 +78,12 @@ manipShape a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect x a
 manipShape2 a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect a x b) 15.4 1.5e-3 0.1 pfc_signal) 
 manipShape3 a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect a b x) 15.4 1.5e-3 0.1 pfc_signal) 
 -}
-main = do prettyPrintInductor (fromJust(makeInductorFindD2 PC40 (ToroidRect 0.02 0.05 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+main = do prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu26 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu40 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu60 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu75 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu90 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
+          prettyPrintInductor (fromJust(makeInductorFindD3 PC40 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
 --          renderableToFile def "example5.svg" chart
 --          renderableToFile def "example6.svg" chart2
 
@@ -317,6 +322,13 @@ powerResults mat max_curr targetL toleranceL driver a = ilist
     where ilist = [(a, makeInductorFindWire mat x max_curr targetL toleranceL driver) | x <- shapeMaker a]
           shapeMaker y = [ToroidRect (x/1000) 0.05 0.06 | x <- y]
 
+makeInductorFindD3 mat (ToroidRect _ od _) max_curr targetL toleranceL driver = best
+    where calcList = [makeInductorFindD2 mat (ToroidRect 0 x 0) max_curr targetL toleranceL driver | x <- (makeList 50 (2*od))]
+          realList = map fromJust (filter isJust calcList)
+          sortedList = inductorSort realList totalInductorPower
+          best = maybeHead sortedList
+
+
 makeInductorFindD2 mat (ToroidRect _ od _) max_curr targetL toleranceL driver = best
     where calcList = [makeInductorFindD1 mat (ToroidRect 0 od x) max_curr targetL toleranceL driver | x <- (makeList 50 (2*od))]
           realList = map fromJust (filter isJust calcList)
@@ -429,7 +441,7 @@ calcTurns shape mat wire current targetL tolerance guess
     | otherwise = (guess, result): (calcTurns shape mat wire current targetL tolerance (newguess))
     where result = calcL shape mat current guess
           closeness = getPercentError result targetL
-          newguess = (guess + 1)
+          newguess = guess / (1 + 0.5 * closeness)
 
 permeability :: Material -> Double
 permeability x = what x
@@ -501,8 +513,19 @@ calcWireMaxTurns t w = fromIntegral(floor((calcWindingArea t) / (pi * (diameter 
 calcWireLayerTurnLength :: Shape -> Wire -> Double -> Double
 calcWireLayerTurnLength (ToroidRect id od thick) (Wire _ d _ _) n = od-id+thick+thick+d+d+4*d*(n-1)
 
-calcWireMaxLength t w = sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
-calcWireMaxResist t w = (resist w) * sum [(calcWireLayerTurnLength t (w) x) * (calcWireLayerTurns t (w) x) | x <- [1..( (calcWireLayers t (w)))]]
+calcWireMaxVolume :: Shape -> Double
+calcWireMaxVolume (ToroidRect id od th) = pi*ir*ir * (ir + h + 2*(or - ir)) + (pi * id * id / od + pi * h) * ((id*id+od*od)/4 - or*or)
+    where od2 = ((id*id)+(od*od))**0.5
+          ir = id * 0.5
+          or = od * 0.5
+          h = th * 0.5
+
+calcWireMaxLength t w = wire_volume / wire_area
+    where wire_area = (diameter w)**2 * pi * 0.25
+          wire_volume = calcWireMaxVolume t
+calcWireMaxResist t w = (resist w) * wire_volume / wire_area
+    where wire_area = (diameter w)**2 * pi * 0.25
+          wire_volume = calcWireMaxVolume t
 
 calcWireResist t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxResist t w)
 calcWireLength t w turns = (turns / (calcWireMaxTurns t w)) * (calcWireMaxLength t w)
