@@ -1,47 +1,62 @@
---import Graphics.Rendering.Chart 
---import Graphics.Rendering.Chart.Backend.Diagrams
---import Data.Colour
---import Data.Colour.Names
---import Data.Default.Class
+--this block of imports is for chart rendering
+import Graphics.Rendering.Chart 
+import Graphics.Rendering.Chart.Backend.Diagrams
+import Data.Colour
+import Data.Colour.Names
+import Data.Default.Class
+import Control.Lens
+--end block
+
+import Data.List
 import Data.Maybe
---import Control.Lens
 
 import System.IO
 import Text.Printf
 
-{-|
-chart = toRenderable layout
+testlist :: [(Double, Double)]
+testlist = [polar_to_rect (pi - x, (r x 5)) | x <- makeList 50 (pi / 2)]
+polar_to_rect :: (Double, Double) -> (Double, Double)
+polar_to_rect (x, y) = (y * cos x, y * sin x)
+r x ir = (ir / cos x) - (ir*ir/((cos x)*(cos x)) - (ir*ir)/(cos x))**0.5
+
+dutyCycleChart = toRenderable layout
   where
-    am :: Double -> Double
-    am x = (sin (x*3.14159/45) + 1) / 2 * (sin (x*3.14159/5))
-    sinusoid2 = plot_points_style .~ filledCircles 2 (opaque red)
-              $ plot_points_values .~ (testList (manipShape 0.09 0.02) [0.03,0.031..0.060])
-              $ plot_points_title .~ "Inner Diameter 0.09 0.02"
+    sinusoid2 x = plot_points_style .~ filledCircles 2 (opaque red)
+              $ plot_points_values .~ (inVlist (dutyCycleOther x))
+              $ plot_points_title .~ (show x) ++ " VAC"
               $ def
-    sinusoid2a = plot_points_style .~ filledCircles 2 (opaque green)
-              $ plot_points_values .~ (testList (manipShape 0.11 0.02) [0.030,0.031..0.060])
-              $ plot_points_title .~ "Inner Diameter 0.11 0.02"
-              $ def
-    sinusoid2b = plot_points_style .~ filledCircles 2 (opaque aqua)
-              $ plot_points_values .~ (testList (manipShape 0.12 0.02) [0.030,0.031..0.060])
-              $ plot_points_title .~ "Inner Diameter 0.12 0.02"
-              $ def
-    sinusoid2c = plot_points_style .~ filledCircles 2 (opaque blanchedalmond)
-              $ plot_points_values .~ (testList (manipShape 0.13 0.02) [0.030,0.031..0.060])
-              $ plot_points_title .~ "Inner Diameter 0.13 0.02"
-              $ def
-    sinusoid2d = plot_points_style .~ filledCircles 2 (opaque brown)
-              $ plot_points_values .~ (testList (manipShape 0.13 0.02) [0.030,0.031..0.060])
-              $ plot_points_title .~ "Inner Diameter 0.13 0.02"
-              $ def
-    sinusoid3 = plot_points_style .~ filledCircles 2 (opaque blue)
-              $ plot_points_values .~ (testList (manipShape 0.10 0.02) [0.03,0.031..0.060])
-              $ plot_points_title .~ "Inner Diameter 0.10 0.02"
-              $ def
-    layout = layout_title .~ "Total Power"
-           $ layout_plots .~ [toPlot sinusoid2, toPlot sinusoid2a, toPlot sinusoid2b, toPlot sinusoid2c, toPlot sinusoid2d, toPlot sinusoid3]
+    layout = layout_title .~ "Duty Cycle"
+           $ layout_plots .~ [toPlot (sinusoid2 x) | x <- inputVoltagesRms]
            $ def
 
+diodeCurrentChart = toRenderable layout
+  where
+    sinusoid2 = plot_points_style .~ filledCircles 2 (opaque red)
+              $ plot_points_values .~ (slist)
+              $ plot_points_title .~ "Amps"
+              $ def
+    sinusoid3 = plot_points_style .~ filledCircles 2 (opaque red)
+              $ plot_points_values .~ (rmsList)
+              $ plot_points_title .~ "Amps"
+              $ def
+    slist :: [(Double, Double)]
+    slist = [(x, averageDiodeCurrent x) | x <- [0,0.0001..0.02]]
+    plist = [averageDiodeCurrent x | x <- [0,0.0001..0.02]]
+    rmsList :: [(Double, Double)]
+    rmsList = [(x, rmsCalc plist) | x <- [0,0.0001..0.02]]
+    layout = layout_title .~ "Diode Current"
+           $ layout_plots .~ [toPlot sinusoid2, toPlot sinusoid3]
+           $ def
+           
+inVlist :: [Double] -> [(Double, Double)]
+inVlist vl = [(1.0 * fromIntegral(x), vl!!x) | x <- [0..length vl - 1]]
+
+rescale inp num = [(minimum inp) + scale * x / actual_num | x <- list]
+    where actual_num = num-1
+          list = [0..actual_num]
+          scale = (maximum inp) - (minimum inp)
+
+{-|
 chart2 = toRenderable layout
   where
     am :: Double -> Double
@@ -73,19 +88,21 @@ chart2 = toRenderable layout
     layout = layout_title .~ "Total Power 0.03 thick"
            $ layout_plots .~ [toPlot sinusoid2, toPlot sinusoid2a, toPlot sinusoid2b, toPlot sinusoid2c, toPlot sinusoid2d, toPlot sinusoid3]
            $ def
-
+-}
 manipShape a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect x a b) 15.4 1.5e-3 0.1 pfc_signal) 
 manipShape2 a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect a x b) 15.4 1.5e-3 0.1 pfc_signal) 
 manipShape3 a b x = maybeInductorPower (makeInductorFindWire PC40 (ToroidRect a b x) 15.4 1.5e-3 0.1 pfc_signal) 
--}
-main = do prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu26 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
-          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu40 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
-          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu60 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
-          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu75 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
-          prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu90 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
-          prettyPrintInductor (fromJust(makeInductorFindD3 PC40 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.1 pfc_signal))
---          renderableToFile def "example5.svg" chart
---          renderableToFile def "example6.svg" chart2
+
+notmain = do prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu26 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.01 pfc_signal))
+             prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu40 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.01 pfc_signal))
+             prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu60 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.01 pfc_signal))
+             prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu75 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.01 pfc_signal))
+             prettyPrintInductor (fromJust(makeInductorFindD3 KoolMu90 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.01 pfc_signal))
+             prettyPrintInductor (fromJust(makeInductorFindD3 PC40 (ToroidRect 0.02 0.15 0.02) 15.4 1.5e-3 0.01 pfc_signal))
+
+main = do renderableToFile def "duty_cycle.svg" dutyCycleChart
+          renderableToFile def "diode_current.svg" diodeCurrentChart
+          prettyPrintInductor (stageInductor)
 
 testList :: (Double -> Maybe Double) -> [Double] -> [(Double, Double)]
 testList func xin = [(x, fromJust(func x)) | x <- xin, isJust (func x)]
@@ -99,12 +116,6 @@ testFunction x
 
 toroidChart a b c d e f mat max_curr targetL toleranceL driver = [inductorOptimumWire mat x max_curr targetL toleranceL driver | x <- (toroidMaker a b c d e f)]
 toroidMaker a b c d e f = [ToroidRect (mmToMeter (a*x)) (mmToMeter (b*y)) (mmToMeter (c*z)) | x <- d, y <- e, z <- f, (a*x) < (b*y)]
-
-notmain = do
-    mapM prettyPrintInductor (take 5 sorted_list)
- where inductorList = makeInductorMatShape 15.4 1.5e-3 0.1 pfc_signal (PC40, ToroidRect (mmToMeter 65) (mmToMeter 102) (mmToMeter 20))
-       notFullList = filter notfull inductorList
-       sorted_list = inductorSort notFullList totalInductorPower 
 
 inductorFilterSort ind_l = notFullList
     where notFullList = filter notfull ind_l
@@ -436,7 +447,6 @@ calcL t mat current turns = (calcShapeAL t mat) * turns * turns * (permeability_
 
 calcTurns shape mat wire current targetL tolerance guess
     | abs(closeness) < tolerance = [(guess, result)]
-    | result > targetL = [(guess, result)]
     | guess > (calcWireMaxTurns shape wire) = [(guess * 10, 0)]
     | otherwise = (guess, result): (calcTurns shape mat wire current targetL tolerance (newguess))
     where result = calcL shape mat current guess
@@ -873,3 +883,110 @@ pc40_bh_60c = [ (0, 0),
                 (1.50528200948540e+003, 4.60568251339301e+002),
                 (1.56978887270300e+003, 4.61401857993628e+002),
                 (1.59755552126534e+003, 4.61401857993628e+002) ]
+
+{-|
+-------------------------------- power supply calculations for FAN9673 pfc controller
+---------------------------------------------------------- for FAN9673 pfc controller
+-------------------------------- power supply calculations for FAN9673 pfc controller
+-}
+--given values
+inputVoltageRms = [100.0,101.0..240]
+inputVoltageRmsMinMax = sort [x * y | x <- inputVoltageRms, y <- [0.85,1,1.1]]
+inputVoltagesRms = rescale inputVoltageRmsMinMax 20
+inputFrequency = [50.0,60.0]
+assumedEfficiency = 0.95
+maxOverload = 1.1
+switchingFrequency = 40000.0
+rippleFactor = 0.1
+voltage_pfc = 400.0
+outputWattage = 2400.0
+hold_time = 15e-3
+minimum_hold_voltage = 0.75
+outputPowerPercent = [x * 0.01 | x <- [0..100]]
+
+--selected component values
+rVIR = 100.0e3
+rIAC = 6.0e6    --universal AC input
+rM = 7500
+vRipple = 0.05
+
+--calculated values
+powerInput = outputWattage / assumedEfficiency
+fIC = switchingFrequency * 0.13
+rRI = 800e6 / switchingFrequency
+vVIR = rVIR * 10e-6
+iLimit1 = 1.2*1.0208 / rRI
+iLimit2 = 1.2*1.03215/ rRI
+
+timeHold = (voltage_pfc**2 - (0.75 * voltage_pfc)**2)*cOUT / (2 * outputWattage)
+rCS v = v**2 * 2 * rM / (maxOverload * rIAC * outputWattage / 3)
+rILimit v = 1.8 * outputWattage / (3 * assumedEfficiency) * 2**0.5 * (rCS v) / v * 4 / iLimit1
+rILimit2 = 1.5 * 0.395 / iLimit2
+stageInductance v = (2**0.5 * v * voltage_pfc - 2**0.5 * v) / (rippleFactor * (averageStageCurrent v) * voltage_pfc * switchingFrequency)
+stageInductor :: Inductor
+stageInductor = fromJust (makeInductorFindD3 PC40 (ToroidRect 0 0.1 0) max_curr targetL 0.05 driver)
+    where max_curr = (peakStageCurrent vmin) + (deltaIL vmin)
+          driver = [ SineWave (minimum inputFrequency) (peakStageCurrent vmin), SineWave switchingFrequency (deltaIL vmin)]
+          targetL = stageInductance vmax
+          vmin = minimum inputVoltagesRms
+          vmax = maximum inputVoltagesRms
+
+cOUT = maximum cOUT_list
+cOUT_list = [ripple_spec, hold_spec]
+    where ripple_spec = outputWattage / (voltage_pfc * 2 * pi * voltage_pfc * assumedEfficiency)
+          hold_spec = (2 * outputWattage * hold_time) / (voltage_pfc**2 - (voltage_pfc * minimum_hold_voltage)**2)
+
+dutyCycle vin = [(voltage_pfc - v) / voltage_pfc | v <- vlist vin]
+dutyCycleOther vin = [(v) / voltage_pfc | v <- vlist vin]
+vlist vin = [(abs . (*vin) . (*(2**0.5)) . sin) (x * 0.02 * pi) | x <- [0..100]]
+
+averageStageCurrent v = 2**0.5 * outputWattage / (3 * v * assumedEfficiency)
+peakStageCurrent v = (averageStageCurrent v) * (1 + rippleFactor * 0.5)
+deltaIL v = (2**0.5 * v * voltage_pfc - 2**0.5*v) / ((stageInductance v) * voltage_pfc * switchingFrequency)
+vRippleCalc = outputWattage / (voltage_pfc * 2 * pi * (minimum inputFrequency) * cOUT)
+averageDiodeCurrent t = (outputWattage / (3 * voltage_pfc)) * (1 - cos(4*pi*(minimum inputFrequency)*t))
+rmsDiodeCurrent = rmsCalc [averageDiodeCurrent x | x <- (makeList 1000 (1/(minimum inputFrequency)))]
+iCurrent vin = vlist (outputWattage / (vin * assumedEfficiency * 3))
+
+rcs_power vin = i * i * (rCS vin)
+    where i = rmsCalc (iCurrent vin)
+
+pfc_diode_power d freq pfcv rmsI vin = (diodeSwitchingLoss d freq pfcv) + (diodePowerLoss d diode_duty rmsI) + (diodeLeakage d duty voltage_pfc)
+    where diode_duty = rmsCalc (dutyCycleOther vin)
+          duty = rmsCalc (dutyCycle vin)
+
+singleStageLoss ind dio trans cs vin = p_ind + p_dio + p_trans + pcs
+    where p_ind = 5
+          p_dio = pfc_diode_power dio switchingFrequency voltage_pfc rmsDiodeCurrent vin
+          p_trans = transistorPowerLoss trans charge_duty (rmsCalc (iCurrent vin))
+          pcs = 5
+          diode_duty = rmsCalc (dutyCycleOther vin)
+          charge_duty = rmsCalc (dutyCycle vin)
+
+--charging, discharging
+
+--charging portion
+--transistor conducts
+--diode leaks
+
+--discharging portion
+--diode conducts
+
+--IGBT resistance, turn on loss, turn off loss
+--ohms, joules, joules
+data Transistor = IGBT Double Double Double
+
+--forward voltage, reverse recovery (coulombs), leakage
+data Diode = Diode Double Double Double
+
+--watts
+transistorSwitchingLoss (IGBT _ lossOn lossOff) freq = freq * lossOn + freq * lossOff
+transistorPowerLoss (IGBT r _ _) d a = r * a * a * d
+diodeSwitchingLoss (Diode _ a _) freq v = a * freq * v
+diodePowerLoss (Diode v _ _) d a = v * a * d
+diodeLeakage (Diode _ _ i) d v = v * i * d
+
+igbt_FGH20N60UFDTU = IGBT (1.8 / 20) 0.38e-3 0.26e-3
+diode_VS_20ETF06FPPbF = Diode 1.3 1.25e-6 0.1e-3
+diode_IDH08G65C6XKSA1 = Diode 1.25 12.2e-9 27.0e-6
+diode_list = [diode_VS_20ETF06FPPbF, diode_IDH08G65C6XKSA1]
