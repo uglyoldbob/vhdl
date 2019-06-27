@@ -32,11 +32,18 @@ architecture behavior of one_wire_master is
 		w0_active, w0_inactive,
 		r_active, r_inactive1, r_sample, r_inactive2,
 		reset_active, reset_inactive1, reset_sample_pd, reset_inactive2);
+	type low_level_command is (
+		idle, write0, write1, read_bit, reset_modules);
 	signal low_level_state: state;
 	signal low_level_timer: integer range 0 to max_delay + 1;
 	signal calculated_dout: std_logic;
 	signal last_read_bit: std_logic;
 	signal devices_present: std_logic;
+	
+	--signals for driving the low level system
+	signal low_level_idle : std_logic;
+	signal low_level_request : low_level_command;
+	
 begin
 	process (reset, dout)
 	begin
@@ -51,9 +58,18 @@ begin
 		if rising_edge(clock) then
 			case low_level_state is
 				when idle => 
+					low_level_idle <= '1';
 					calculated_dout <= '1';
 					low_level_timer <= 0;
+					case low_level_request is
+						when write0 => low_level_state <= w0_active;
+						when write1 => low_level_state <= w1_active;
+						when read_bit => low_level_state <= r_active;
+						when reset_modules => low_level_state <= reset_active;
+						when others => low_level_request <= idle;
+					end case;
 				when w1_active => 
+					low_level_idle <= '0';
 					calculated_dout <= '0';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_1_low_time) then
@@ -61,6 +77,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when w1_inactive => 
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_1_high_time) then
@@ -68,6 +85,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when w0_active => 
+					low_level_idle <= '0';
 					calculated_dout <= '0';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_0_low_time) then
@@ -75,6 +93,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when w0_inactive => 
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_0_high_time) then
@@ -82,6 +101,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when r_active =>
+					low_level_idle <= '0';
 					calculated_dout <= '0';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= read_low_time) then
@@ -89,6 +109,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when r_inactive1 =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= read_sample_delay_time) then
@@ -96,10 +117,12 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when r_sample =>
-					last_read_bit <= din;
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					last_read_bit <= din;
 					low_level_state <= r_inactive2;
 				when r_inactive2 =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= read_high_time) then
@@ -107,6 +130,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when reset_active =>
+					low_level_idle <= '0';
 					calculated_dout <= '0';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= reset_low_time) then
@@ -114,6 +138,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when reset_inactive1 =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= reset_pd_delay) then
@@ -121,10 +146,12 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when reset_sample_pd =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					devices_present <= din;
 					low_level_state <= reset_inactive2;
 				when reset_inactive2 =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= reset_inactive_time) then
@@ -132,6 +159,7 @@ begin
 						low_level_timer <= 0;
 					end if;
 				when others => 
+					low_level_idle <= '0';
 					calculated_dout <= '1';
 					low_level_timer <= 0;
 					low_level_state <= idle;
