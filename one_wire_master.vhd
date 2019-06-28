@@ -44,9 +44,71 @@ architecture behavior of one_wire_master is
 	signal low_level_idle : std_logic;
 	signal low_level_request : low_level_command;
 	
+	type int_state is (
+		idle, reset_modules, read_byte, write_byte, write_byte_pause, read_bit, write_bit);
+	
+	signal intermediate_subcounter : integer range 0 to 10;
+	signal intermediate_state : int_state;
+	signal intermediate_byte_write : std_logic_vector(7 downto 0);
+	signal intermediate_byte_read : std_logic_vector(7 downto 0);
+	signal intermediate_counter : integer range 0 to 65;
 begin
 	dout <= '1' when reset='0' else calculated_dout;
-	low_level_request <= write1;
+	
+	process (clock)
+	begin
+		if rising_edge(clock) then
+			case intermediate_state is
+				when idle =>
+					low_level_request <= idle;
+					if low_level_idle = '1' then
+						case intermediate_subcounter is
+							when 0 =>
+								intermediate_state <= reset_modules;
+								intermediate_byte_write(0) <= '0';
+								intermediate_subcounter <= intermediate_subcounter + 1;
+							when 1 =>
+								intermediate_state <= write_byte;
+								intermediate_byte_write <= x"F0";
+								intermediate_counter <= 0;
+								intermediate_subcounter <= 0;
+							when others =>
+								null;
+						end case;
+					end if;
+				when write_bit =>
+					low_level_request <= write0 when intermediate_byte_write(0)='0' else write1;
+					if low_level_idle = '0' then
+						intermediate_state <= idle;
+					end if;
+				when reset_modules =>
+					low_level_request <= reset_modules;
+					if low_level_idle = '0' then
+						intermediate_state <= idle;
+					end if;
+				when write_byte =>
+					if low_level_idle = '1' then
+						low_level_request <= write1 when intermediate_byte_write(intermediate_counter) else write0;
+						intermediate_counter <= intermediate_counter + 1;
+						intermediate_state <= write_byte_pause;
+					end if;
+				when write_byte_pause =>
+					if low_level_idle = '0' then
+						if intermediate_counter = 8 then
+							intermediate_state <= idle;
+							intermediate_counter <= 0;
+						else
+							low_level_request <= idle;
+							intermediate_state <= write_byte;
+						end if;
+					end if;
+				when others =>
+					low_level_request <= idle;
+					intermediate_state <= idle;
+			end case;
+		end if;
+	end process;
+
 	process (clock)
 	begin
 		if rising_edge(clock) then

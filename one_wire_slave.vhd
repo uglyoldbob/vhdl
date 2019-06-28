@@ -9,7 +9,8 @@ port(
 	dout: out std_logic;
 	din: in std_logic;
 	clock: in std_logic;
-	reset: in std_logic
+	reset: in std_logic;
+	addr: in std_logic_vector(63 downto 0)
 );
 end entity one_wire_slave;
 ----------------------------------------------------

@@ -49,7 +49,8 @@ BEGIN
 		clock => clock,
 		reset => '1',
 		din => dat1,
-		dout => dat2);
+		dout => dat2,
+		addr => x"f8c2b6a13a72b937");
 
 -- *** Test Bench - User Defined Section ***
 	tb : PROCESS
