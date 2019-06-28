@@ -45,15 +45,8 @@ architecture behavior of one_wire_master is
 	signal low_level_request : low_level_command;
 	
 begin
-	process (reset, dout)
-	begin
-		if reset='0' then
-			dout <= '1';
-		else
-			dout <= calculated_dout;
-		end if;
-	end process;
-	low_level_request <= reset_modules;
+	dout <= '1' when reset='0' else calculated_dout;
+	low_level_request <= write1;
 	process (clock)
 	begin
 		if rising_edge(clock) then
@@ -149,7 +142,7 @@ begin
 				when reset_sample_pd =>
 					low_level_idle <= '0';
 					calculated_dout <= '1';
-					devices_present <= din;
+					devices_present <= not din;
 					low_level_state <= reset_inactive2;
 				when reset_inactive2 =>
 					low_level_idle <= '0';
@@ -167,5 +160,4 @@ begin
 			end case;
 		end if;
 	end process;
-	dout <= '1';
 end behavior;

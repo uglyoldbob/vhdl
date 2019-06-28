@@ -27,17 +27,29 @@ END one_wire_testbench;
 
 ARCHITECTURE behavior OF one_wire_testbench IS 
 	signal clock : std_logic := '0';
+	
+	signal dat1: std_logic;
+	signal dat2: std_logic;
 BEGIN
 
 -- Please check and add your generic clause manually
-	uut: entity work.one_wire_master 
+	uut2: entity work.one_wire_master 
 	generic map(clock_period => 100)
 	PORT MAP(
 		clock => clock,
 		reset => '1',
-		din => '1'
+		din => dat2,
+		dout => dat1
 	);
 	clock <= not clock after 50ns;
+	
+	uut3: entity work.one_wire_slave
+	generic map(clock_period => 100)
+	port map(
+		clock => clock,
+		reset => '1',
+		din => dat1,
+		dout => dat2);
 
 -- *** Test Bench - User Defined Section ***
 	tb : PROCESS
