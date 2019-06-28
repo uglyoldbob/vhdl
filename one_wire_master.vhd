@@ -53,6 +53,7 @@ begin
 			dout <= calculated_dout;
 		end if;
 	end process;
+	low_level_request <= reset_modules;
 	process (clock)
 	begin
 		if rising_edge(clock) then
@@ -66,7 +67,7 @@ begin
 						when write1 => low_level_state <= w1_active;
 						when read_bit => low_level_state <= r_active;
 						when reset_modules => low_level_state <= reset_active;
-						when others => low_level_request <= idle;
+						when others => low_level_state <= idle;
 					end case;
 				when w1_active => 
 					low_level_idle <= '0';
