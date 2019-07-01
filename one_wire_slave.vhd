@@ -21,13 +21,12 @@ architecture behavior of one_wire_slave is
 	constant write_inactive_time : integer := 10000 / clock_period;
 	constant reset_time : integer := 450000 / clock_period;
 	constant presence_delay_time : integer := 10000 / clock_period;
-	constant presence_drive_time : integer := 10000 / clock_period;
-	constant reset_end_delay : integer := 50000 / clock_period;
+	constant presence_drive_time : integer := 200000 / clock_period;
+	constant reset_end_delay : integer := 30000 / clock_period;
 	constant read_sample_delay_time : integer := 22000 / clock_period;
-	constant read_inactive_time : integer := 45000 / clock_period;
 	type state is (
 		idle, write1_wait, write1_driving, write0_wait, write0_driving, write_waiting, 
-		read_wait, read_sample_delay, read_sample, read_inactive,
+		read_wait, read_sample_delay, read_sample,
 		presence_delay, presence_drive, reset_end_wait
 		);
 	type low_level_command is (
@@ -48,17 +47,77 @@ architecture behavior of one_wire_slave is
 	signal rising_din : std_logic;
 	
 	signal reset2: std_logic;
+	signal low_level_reset: std_logic;
 	signal combined_reset: std_logic;
+	signal combined_reset2: std_logic;
+
+	type int_state is (
+		idle, read_byte, read_byte_wait, read_byte_sample, write_byte, write_byte_pause,
+		read_bit, read_bit_wait,
+		write_bit);
+
+	signal intermediate_subcounter : integer range 0 to 10;
+	signal intermediate_state : int_state;
+	signal intermediate_byte_write : std_logic_vector(7 downto 0);
+	signal intermediate_byte_read : std_logic_vector(7 downto 0);
+	signal intermediate_counter : integer range 0 to 65;
 begin
 	combined_reset <= reset and reset2;
+	combined_reset2 <= reset and reset2 and low_level_reset;
 	dout <= '1' when combined_reset='0' else calculated_dout;
-	low_level_request <= read_bit;
+
+	process (combined_reset, clock)
+	begin
+		if combined_reset2='0' then
+			intermediate_state <= read_byte;
+			intermediate_counter <= 0;
+		elsif rising_edge(clock) then
+			case intermediate_state is
+				when idle =>
+					low_level_request <= idle;
+					intermediate_counter <= 0;
+				when read_bit =>
+					low_level_request <= read_bit;
+					if low_level_idle = '1' then
+						intermediate_state <= read_bit_wait;
+					end if;
+				when read_bit_wait =>
+					low_level_request <= idle;
+					if low_level_idle='0' then
+						intermediate_byte_read(0) <= last_read_bit;
+						intermediate_state <= idle;
+					end if;
+				when read_byte =>
+					low_level_request <= read_bit;
+					if low_level_idle = '0' then
+						intermediate_state <= read_byte_wait;
+					end if;
+				when read_byte_wait =>
+					low_level_request <= idle;
+					if low_level_idle = '1' then
+						intermediate_state <= read_byte_sample;
+					end if;
+				when read_byte_sample =>
+					intermediate_byte_read(intermediate_counter) <= last_read_bit;
+					intermediate_counter <= intermediate_counter + 1;
+					if intermediate_counter = 7 then
+						intermediate_state <= idle;
+					else
+						intermediate_state <= read_byte;
+					end if;
+				when others =>
+					null;
+			end case;
+		end if;
+	end process;
+
 	process (clock)
 	begin
 		previous_din <= din;
 		falling_din <= previous_din and not din;
 		rising_din <= not previous_din and din;
 	end process;
+
 	process (clock)
 	begin
 		if rising_edge(clock) then		
@@ -74,29 +133,37 @@ begin
 			end if;
 		end if;
 	end process;
-	process (clock)
+
+	process (combined_reset, clock)
 	begin
 		if combined_reset='0' then
+			low_level_idle <= '0';
 			low_level_state <= presence_delay;
 			calculated_dout <= '1';
 		elsif rising_edge(clock) then
 			case low_level_state is
 				when presence_delay =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '0';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= presence_delay_time) then
 						low_level_state <= presence_drive;
 						low_level_timer <= 0;
 					end if;
 				when presence_drive =>
+					low_level_idle <= '0';
 					calculated_dout <= '0';
+					low_level_reset <= '0';
 					low_level_timer <= low_level_timer + 1;
-					if (low_level_timer >= presence_delay_time) then
+					if (low_level_timer >= presence_drive_time) then
 						low_level_state <= reset_end_wait;
 						low_level_timer <= 0;
 					end if;
 				when reset_end_wait =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '0';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= reset_end_delay) then
 						low_level_state <= idle;
@@ -105,6 +172,7 @@ begin
 				when idle => 
 					low_level_idle <= '1';
 					calculated_dout <= '1';
+					low_level_reset <= '1';
 					low_level_timer <= 0;
 					case low_level_request is
 						when write0 => low_level_state <= write0_wait;
@@ -113,24 +181,32 @@ begin
 						when others => low_level_state <= idle;
 					end case;
 				when write1_wait =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '1';
 					if falling_din='1' then
 						low_level_state <= write1_driving;
 					end if;
 				when write1_driving =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_drive_time) then
 						low_level_state <= write_waiting;
 						low_level_timer <= 0;
 					end if;
 				when write0_wait =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '1';
 					if falling_din='1' then
 						low_level_state <= write0_driving;
 					end if;
 				when write0_driving =>
+					low_level_idle <= '0';
 					calculated_dout <= '0';
+					low_level_reset <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_drive_time) then
 						low_level_state <= write_waiting;
@@ -139,36 +215,40 @@ begin
 						low_level_state <= write1_driving;
 					end if;
 				when write_waiting =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= write_inactive_time) then
 						low_level_state <= idle;
 						low_level_timer <= 0;
 					end if;
 				when read_wait =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '1';
 					if falling_din='1' then
 						low_level_state <= read_sample_delay;
 					end if;
 				when read_sample_delay =>
+					low_level_idle <= '0';
+					calculated_dout <= '1';
+					low_level_reset <= '1';
 					low_level_timer <= low_level_timer + 1;
 					if (low_level_timer >= read_sample_delay_time) then
 						low_level_state <= read_sample;
 						low_level_timer <= 0;
 					end if;
 				when read_sample =>
-					last_read_bit <= din;
-					low_level_state <= read_inactive;
-				when read_inactive =>
+					low_level_idle <= '0';
 					calculated_dout <= '1';
-					low_level_timer <= low_level_timer + 1;
-					if (low_level_timer >= read_inactive_time) then
-						low_level_state <= idle;
-						low_level_timer <= 0;
-					end if;
+					low_level_reset <= '1';
+					last_read_bit <= din;
+					low_level_state <= idle;
 				when others => 
 					low_level_idle <= '0';
 					calculated_dout <= '1';
+					low_level_reset <= '0';
 					low_level_timer <= 0;
 					low_level_state <= idle;
 			end case;
