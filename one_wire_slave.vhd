@@ -55,49 +55,106 @@ architecture behavior of one_wire_slave is
 		idle, read_byte, read_byte_wait, read_byte_sample, write_byte, write_byte_pause,
 		read_bit, read_bit_wait,
 		write_bit);
+	type int_request is (
+		idle, read_byte
+		);
 
+	signal intermediate_request : int_request;
 	signal intermediate_subcounter : integer range 0 to 10;
 	signal intermediate_state : int_state;
 	signal intermediate_byte_write : std_logic_vector(7 downto 0);
 	signal intermediate_byte_read : std_logic_vector(7 downto 0);
 	signal intermediate_counter : integer range 0 to 65;
+	signal intermediate_idle : std_logic;
+
+	type command_state is (
+		idle, idle_wait, process_cmd_byte, do_nothing,
+		search_rom_write_plus, search_rom_write_minus, search_rom_read
+		);
+
+	signal cmd_runner : command_state;
 begin
 	combined_reset <= reset and reset2;
 	combined_reset2 <= reset and reset2 and low_level_reset;
 	dout <= '1' when combined_reset='0' else calculated_dout;
-
+	
 	process (combined_reset, clock)
+	begin
+		if combined_reset='0' then
+			cmd_runner <= idle;
+			intermediate_request <= idle;
+		elsif rising_edge(clock) then
+			case cmd_runner is
+				when idle =>
+					intermediate_request <= read_byte;
+					if intermediate_idle = '0' then
+						cmd_runner <= idle_wait;
+					end if;
+				when idle_wait =>
+					intermediate_request <= idle;
+					if intermediate_idle = '1' then
+						cmd_runner <= process_cmd_byte;
+					end if;
+				when process_cmd_byte =>
+					case intermediate_byte_read is
+						when x"F0" =>
+							cmd_runner <= search_rom_write_plus;
+						when others =>
+							cmd_runner <= do_nothing;
+					end case;
+				when do_nothing =>
+					intermediate_request <= idle;
+				when others =>
+					null;
+			end case;
+		end if;
+	end process;
+
+	process (combined_reset2, clock)
 	begin
 		if combined_reset2='0' then
 			intermediate_state <= read_byte;
 			intermediate_counter <= 0;
+			intermediate_idle <= '0';
 		elsif rising_edge(clock) then
 			case intermediate_state is
 				when idle =>
+					intermediate_idle <= '1';
 					low_level_request <= idle;
 					intermediate_counter <= 0;
+					case intermediate_request is
+						when read_byte =>
+							intermediate_state <= read_byte;
+						when others =>
+							null;
+					end case;
 				when read_bit =>
+					intermediate_idle <= '0';
 					low_level_request <= read_bit;
 					if low_level_idle = '1' then
 						intermediate_state <= read_bit_wait;
 					end if;
 				when read_bit_wait =>
+					intermediate_idle <= '0';
 					low_level_request <= idle;
 					if low_level_idle='0' then
 						intermediate_byte_read(0) <= last_read_bit;
 						intermediate_state <= idle;
 					end if;
 				when read_byte =>
+					intermediate_idle <= '0';
 					low_level_request <= read_bit;
 					if low_level_idle = '0' then
 						intermediate_state <= read_byte_wait;
 					end if;
 				when read_byte_wait =>
+					intermediate_idle <= '0';
 					low_level_request <= idle;
 					if low_level_idle = '1' then
 						intermediate_state <= read_byte_sample;
 					end if;
 				when read_byte_sample =>
+					intermediate_idle <= '0';
 					intermediate_byte_read(intermediate_counter) <= last_read_bit;
 					intermediate_counter <= intermediate_counter + 1;
 					if intermediate_counter = 7 then
